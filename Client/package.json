@@ -1,0 +1,21 @@
+{
+  "name": "thta-ai",
+  "private": true,
+  "version": "0.1.1",
+  "type": "module",
+  "scripts": {
+    "watch": "tsc && vite build --watch",
+    "build": "tsc && vite build",
+    "generate-client": "node scripts/generate-openapi.js https://localhost:5000/umbraco/swagger/thtaai/swagger.json"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.97.1",
+    "@types/node": "^25.9.0",
+    "@umbraco-cms/backoffice": "^*",
+    "chalk": "^5.6.2",
+    "cross-env": "^10.1.0",
+    "node-fetch": "^3.3.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.1.9"
+  }
+}

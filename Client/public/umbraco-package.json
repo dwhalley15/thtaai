@@ -1,0 +1,14 @@
+{
+  "id": "thta_ai",
+  "name": "thta_ai",
+  "version": "0.0.0",
+  "allowTelemetry": true,
+  "extensions": [
+    {
+      "name": "thtaaiBundle",
+      "alias": "thta_ai.Bundle",
+      "type": "bundle",
+      "js": "/App_Plugins/thtaai/thta-ai.js?v=1779197371125"
+    }
+  ]
+}
