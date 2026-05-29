@@ -74,6 +74,7 @@ namespace thta_ai.Controllers
                 request.Prompt,
                 request.ConversationId,
                 request.IsNewConversation,
+                request.Mode,
                 cancellationToken))
             {
                 var content = chunk.Choices?

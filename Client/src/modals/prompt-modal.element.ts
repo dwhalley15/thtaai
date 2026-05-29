@@ -4,6 +4,7 @@ import { css } from '@umbraco-cms/backoffice/external/lit';
 import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 import { createRef, ref } from "lit/directives/ref.js";
 import { UMB_AUTH_CONTEXT } from '@umbraco-cms/backoffice/auth';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 
 import type {
   UmbModalContext,
@@ -102,7 +103,8 @@ export class PromptModalElement
         body: JSON.stringify({
           prompt: currentPrompt,
           conversationId: this._conversationId,
-          isNewConversation: this._isNewConversation
+          isNewConversation: this._isNewConversation,
+          mode: this.modalContext?.data?.mode ?? 'text'
         })
       });
 
@@ -118,7 +120,7 @@ export class PromptModalElement
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        
+
         buffer += decoder.decode(value, { stream: true });
 
         let boundaryIndex;
@@ -214,7 +216,10 @@ export class PromptModalElement
         ${this._messages.map(message => html`
           <div class="message">
             <strong>${message.role === "user" ? "You" : "AI"}:</strong>
-            <p>${message.content}</p>
+            ${message.role === "assistant"
+                ? html`<div class="assistant-content">${unsafeHTML(message.content)}</div>`
+                : html`<p>${message.content}</p>`
+              }
           </div>
         `)}
        </div>
@@ -312,6 +317,22 @@ export class PromptModalElement
           width: 100%;
           max-width: 100%;
           box-sizing: border-box;
+        }
+
+        .assistant-content {
+          margin: 4px 0 0 0;
+        }
+
+        .assistant-content p,
+        .assistant-content h2,
+        .assistant-content h3,
+        .assistant-content ul,
+        .assistant-content ol {
+          margin: 0 0 8px 0;
+        }
+
+        .assistant-content *:last-child {
+          margin-bottom: 0;
         }
       `
   ];

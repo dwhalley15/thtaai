@@ -6,4 +6,6 @@ public class GenerateRequest
     public string Prompt { get; set; } = string.Empty;
 
     public bool IsNewConversation { get; set; }
+
+    public string Mode { get; set; } = "text";
 }

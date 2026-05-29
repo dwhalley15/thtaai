@@ -8,5 +8,6 @@ public interface ITextGenerationService
         string prompt,
         Guid conversationId,
         bool isNewConversation,
+        string mode = "text",
         CancellationToken cancellationToken = default);
 }

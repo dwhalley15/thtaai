@@ -82,6 +82,7 @@ public class TextGenerationService : ITextGenerationService
 string prompt,
 Guid conversationId,
 bool isNewConversation,
+string mode = "text",
 [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var messages = new List<ChatMessage>();
@@ -91,7 +92,7 @@ bool isNewConversation,
             messages.Add(new ChatMessage
             {
                 Role = "system",
-                Content = BuildSystemPrompt()
+                Content = mode == "html" ? BuildHtmlSystemPrompt() : BuildSystemPrompt()
             });
         }
 
@@ -185,5 +186,23 @@ bool isNewConversation,
         - Preserve plain text formatting where appropriate
         """;
     }
+
+    private string BuildHtmlSystemPrompt()
+{
+    return """
+    You generate HTML content based on the user's request for use in a rich text editor.
+
+    Rules:
+    - Your entire response must be valid, clean HTML only
+    - Do not include <html>, <head>, or <body> tags
+    - Do not explain, comment, or describe your process
+    - Do not prepend labels such as "Answer:", "Result:", or "Output:"
+    - Use semantic elements: <p>, <h2>, <h3>, <ul>, <ol>, <li>, <strong>, <em>, <a>, <blockquote> etc.
+    - Do not use inline styles or <style> tags
+    - Do not use markdown
+    - Do not use code fences
+    - Ensure all tags are properly closed
+    """;
+}
 
 }

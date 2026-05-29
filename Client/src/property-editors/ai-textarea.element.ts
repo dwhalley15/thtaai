@@ -64,7 +64,7 @@ export class ThtaAiTextareaElement extends UmbLitElement {
                     label="AI Generated Content"
                     .value=${this.value ?? ""}
                     @input=${this._onInput}
-                    .rows=${8}"
+                    .rows=${8}
                     style="flex:1;"
                 ></uui-textarea>
 

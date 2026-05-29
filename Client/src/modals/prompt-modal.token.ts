@@ -2,6 +2,7 @@ import { UmbModalToken } from "@umbraco-cms/backoffice/modal";
 
 export type PromptModalData = {
     prompt: string;
+    mode?: 'text' | 'html';
 };
 
 export type PromptModalValue = {
