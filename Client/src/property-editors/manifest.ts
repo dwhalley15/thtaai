@@ -1,4 +1,6 @@
-export const manifests = [
+import type { ManifestPropertyEditorUi } from '@umbraco-cms/backoffice/property-editor';
+
+export const manifests: ManifestPropertyEditorUi[] = [
     {
         type: "propertyEditorUi",
         alias: "thta.propertyEditor.aiTextstring",
@@ -29,5 +31,23 @@ export const manifests = [
             group: "ai-wrappers",
             propertyEditorSchemaAlias: "Umbraco.TextArea",
         },
+    },
+
+    {
+        type: "propertyEditorUi",
+        alias: "thta.propertyEditor.aiImage",
+        name: "AI Image",
+
+        elementName: "thta-ai-image",
+        element: () => import("./ai-image.element"),
+
+        meta: {
+            label: 'AI Image',
+            icon: 'icon-picture',
+            group: 'ai-wrappers',
+            propertyEditorSchemaAlias: 'Umbraco.MediaPicker3',
+            supportsReadOnly: true
+        }
+
     }
 ];

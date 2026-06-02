@@ -5,9 +5,10 @@ import { UMB_MODAL_MANAGER_CONTEXT } from "@umbraco-cms/backoffice/modal";
 import { THTA_AI_PROMPT_MODAL }
     from "../modals/prompt-modal.token";
 import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
+import type { UmbPropertyEditorUiElement } from '@umbraco-cms/backoffice/property-editor';
 
 @customElement("thta-ai-textstring")
-export class ThtaAiTextstringElement extends UmbLitElement {
+export class ThtaAiTextstringElement extends UmbLitElement implements UmbPropertyEditorUiElement {
 
     private _modalManager?: any;
 
@@ -84,3 +85,5 @@ export class ThtaAiTextstringElement extends UmbLitElement {
         `;
     }
 }
+
+export { ThtaAiTextstringElement as default };

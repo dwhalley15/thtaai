@@ -1,4 +1,3 @@
-using System.Runtime.CompilerServices;
 using thta_ai.Models;
 
 public interface ITextGenerationService

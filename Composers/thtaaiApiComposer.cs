@@ -21,8 +21,12 @@ namespace thta_ai.Composers
 
             builder.Services.AddScoped<ITextGenerationService, TextGenerationService>();
 
-            builder.Services.Configure<TextGenerationOptions>(
-                builder.Config.GetSection("TextGeneration")
+            builder.Services.AddScoped<IImageGenerationService, ImageGenerationService>();
+
+            builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
+
+            builder.Services.Configure<AiGenerationOptions>(
+                builder.Config.GetSection("AiGeneration")
             );
 
             builder.Services.Configure<SwaggerGenOptions>(opt =>
