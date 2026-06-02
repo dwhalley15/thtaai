@@ -9,9 +9,9 @@ public class TextGenerationService : ITextGenerationService
 {
 
     private readonly HttpClient _httpClient;
-    private readonly TextGenerationOptions _options;
+    private readonly AiGenerationOptions _options;
 
-    public TextGenerationService(HttpClient httpClient, IOptions<TextGenerationOptions> options)
+    public TextGenerationService(HttpClient httpClient, IOptions<AiGenerationOptions> options)
     {
         _httpClient = httpClient;
         _options = options.Value;
@@ -79,11 +79,11 @@ public class TextGenerationService : ITextGenerationService
     }
 
     public async IAsyncEnumerable<ChatCompletionChunk> StreamTextAsync(
-string prompt,
-Guid conversationId,
-bool isNewConversation,
-string mode = "text",
-[EnumeratorCancellation] CancellationToken cancellationToken = default)
+    string prompt,
+    Guid conversationId,
+    bool isNewConversation,
+    string mode = "text",
+    [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var messages = new List<ChatMessage>();
 

@@ -87,6 +87,7 @@ export class PromptModalElement
     await this._scrollToBottom();
 
     let assistantText = "";
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
     try {
 
@@ -112,7 +113,7 @@ export class PromptModalElement
         throw new Error("Streaming request failed");
       }
 
-      const reader = response.body.getReader();
+      reader = response.body.getReader();
       const decoder = new TextDecoder();
 
       let buffer = "";
@@ -183,6 +184,11 @@ export class PromptModalElement
     } catch (err: any) {
       this._errorMessage = err?.message ?? "Generation failed.";
     } finally {
+      try {
+        await reader?.cancel();
+      } catch { }
+
+      reader?.releaseLock?.();
       this._loading = false;
     }
   }
@@ -217,9 +223,9 @@ export class PromptModalElement
           <div class="message">
             <strong>${message.role === "user" ? "You" : "AI"}:</strong>
             ${message.role === "assistant"
-                ? html`<div class="assistant-content">${unsafeHTML(message.content)}</div>`
-                : html`<p>${message.content}</p>`
-              }
+        ? html`<div class="assistant-content">${unsafeHTML(message.content)}</div>`
+        : html`<p>${message.content}</p>`
+      }
           </div>
         `)}
        </div>

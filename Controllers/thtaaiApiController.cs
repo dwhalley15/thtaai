@@ -16,10 +16,16 @@ namespace thta_ai.Controllers
 
         private readonly ITextGenerationService _generator;
 
-        public thtaaiApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator)
+        private readonly IImageGenerationService _imageGenerator;
+
+        private readonly IMediaUploadService _mediaUploadService;
+
+        public thtaaiApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator, IImageGenerationService imageGenerator, IMediaUploadService mediaUploadService)
         {
             _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
             _generator = generator;
+            _imageGenerator = imageGenerator;
+            _mediaUploadService = mediaUploadService;
         }
 
         [HttpGet("ping")]
@@ -56,6 +62,32 @@ namespace thta_ai.Controllers
             {
                 ConversationId = result.ConversationId,
                 Text = result.Text
+            });
+        }
+
+        [HttpPost("generateImage")]
+        [ProducesResponseType(typeof(List<ImageGenerateResponse>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GenerateImage(
+        [FromBody] ImageGenerateRequest request,
+        CancellationToken cancellationToken)
+        {
+            var results = await _imageGenerator.GenerateImagesAsync(request.Prompt, cancellationToken);
+
+            return Ok(results);
+        }
+
+        [HttpPost("uploadImage")]
+        public async Task<IActionResult> UploadImage(
+        [FromBody] UploadImageRequest request,
+        CancellationToken ct)
+        {
+            var result = await _mediaUploadService.CreateFromUrlAsync(
+                request.ImageUrl,
+                request.AltText,
+                ct);
+
+            return Ok(new {
+                mediaKey = result.Key
             });
         }
 

@@ -4,9 +4,10 @@ import { html } from "lit";
 import { UMB_MODAL_MANAGER_CONTEXT } from "@umbraco-cms/backoffice/modal";
 import { THTA_AI_PROMPT_MODAL } from "../modals/prompt-modal.token";
 import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
+import type { UmbPropertyEditorUiElement } from '@umbraco-cms/backoffice/property-editor';
 
 @customElement("thta-ai-textarea")
-export class ThtaAiTextareaElement extends UmbLitElement {
+export class ThtaAiTextareaElement extends UmbLitElement implements UmbPropertyEditorUiElement {
 
     private _modalManager?: any;
 
@@ -80,3 +81,5 @@ export class ThtaAiTextareaElement extends UmbLitElement {
         `;
     }
 }
+
+export { ThtaAiTextareaElement as default };
