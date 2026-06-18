@@ -15,6 +15,7 @@
 
 
   <ItemGroup>
+    <PackageReference Include="MessagePack" Version="3.1.7" />
     <PackageReference Include="Umbraco.Cms.Web.Website" Version="*" />
     <PackageReference Include="Umbraco.Cms.Web.Common" Version="*" />
     <PackageReference Include="Umbraco.Cms.Api.Common" Version="*" />
