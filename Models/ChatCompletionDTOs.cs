@@ -1,6 +1,6 @@
 public class ChatCompletionRequest
 {
-    public string? Intent { get; set; }
+    public string? Model { get; set; }
     public bool Stream { get; set; } = false;
     public Guid ConversationId { get; set; }
     public List<ChatMessage> Messages { get; set; } = new();

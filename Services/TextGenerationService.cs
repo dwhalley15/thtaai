@@ -38,7 +38,7 @@ public class TextGenerationService : ITextGenerationService
 
         var request = new ChatCompletionRequest
         {
-            Intent = "Reasoning",
+            Model = _options.Model,
             Stream = false,
             ConversationId = conversationId,
             Messages = messages
@@ -48,7 +48,7 @@ public class TextGenerationService : ITextGenerationService
 
         var httpRequest = new HttpRequestMessage(
             HttpMethod.Post,
-            $"{_options.BaseUrl}/v1/chat/completions"
+            $"{_options.BaseUrl}"
         );
 
         httpRequest.Headers.Authorization =
@@ -104,7 +104,7 @@ public class TextGenerationService : ITextGenerationService
 
         var request = new ChatCompletionRequest
         {
-            Intent = "Reasoning",
+            Model = _options.Model,
             Stream = true,
             ConversationId = conversationId,
             Messages = messages
@@ -113,7 +113,7 @@ public class TextGenerationService : ITextGenerationService
         var json = JsonSerializer.Serialize(request);
 
         var httpRequest = new HttpRequestMessage(HttpMethod.Post,
-            $"{_options.BaseUrl}/v1/chat/completions");
+            $"{_options.BaseUrl}");
 
         httpRequest.Headers.Authorization =
             new AuthenticationHeaderValue("Bearer", _options.ApiKey);

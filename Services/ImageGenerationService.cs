@@ -30,7 +30,7 @@ public class ImageGenerationService : IImageGenerationService
 
         var request = new ChatCompletionRequest
         {
-            Intent = "Reasoning",
+            Model = _options.Model,
             Stream = false,
             Messages = messages
         };
@@ -39,7 +39,7 @@ public class ImageGenerationService : IImageGenerationService
 
         var httpRequest = new HttpRequestMessage(
             HttpMethod.Post,
-            $"{_options.BaseUrl}/v1/chat/completions"
+            $"{_options.BaseUrl}"
         );
 
         httpRequest.Headers.Authorization =
