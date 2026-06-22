@@ -17,6 +17,11 @@ namespace thta_ai.Composers
         public void Compose(IUmbracoBuilder builder)
         {
 
+            builder.Services.AddHttpClient(string.Empty, client =>
+            {
+                client.Timeout = Timeout.InfiniteTimeSpan;
+            });
+
             builder.Services.AddSingleton<IOperationIdHandler, CustomOperationHandler>();
 
             builder.Services.AddScoped<ITextGenerationService, TextGenerationService>();
@@ -24,6 +29,8 @@ namespace thta_ai.Composers
             builder.Services.AddScoped<IImageGenerationService, ImageGenerationService>();
 
             builder.Services.AddScoped<IMediaUploadService, MediaUploadService>();
+
+            builder.Services.AddScoped<IPageGenerationService, PageGenerationService>();
 
             builder.Services.Configure<AiGenerationOptions>(
                 builder.Config.GetSection("AiGeneration")
@@ -61,7 +68,7 @@ namespace thta_ai.Composers
         public class thtaaiOperationSecurityFilter : BackOfficeSecurityRequirementsOperationFilterBase
         {
             protected override string ApiName => Constants.ApiName;
-            
+
         }
 
         // This is used to generate nice operation IDs in our swagger json file
