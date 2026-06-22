@@ -16,52 +16,31 @@ namespace thta_ai.Controllers
 
         private readonly ITextGenerationService _generator;
 
+        private readonly IPageGenerationService _pageGenerator;
+
         private readonly IImageGenerationService _imageGenerator;
 
         private readonly IMediaUploadService _mediaUploadService;
 
-        public thtaaiApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator, IImageGenerationService imageGenerator, IMediaUploadService mediaUploadService)
+        public thtaaiApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator, IPageGenerationService pageGenerator, IImageGenerationService imageGenerator, IMediaUploadService mediaUploadService)
         {
             _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
             _generator = generator;
+            _pageGenerator = pageGenerator;
             _imageGenerator = imageGenerator;
             _mediaUploadService = mediaUploadService;
         }
 
-        [HttpGet("ping")]
-        [ProducesResponseType<string>(StatusCodes.Status200OK)]
-        public string Ping() => "Pong";
-
-        [HttpGet("whatsTheTimeMrWolf")]
-        [ProducesResponseType(typeof(DateTime), 200)]
-        public DateTime WhatsTheTimeMrWolf() => DateTime.Now;
-
-        [HttpGet("whatsMyName")]
-        [ProducesResponseType<string>(StatusCodes.Status200OK)]
-        public string WhatsMyName()
+        [HttpPost("generatePage")]
+        [ProducesResponseType(typeof(GeneratePageResponse), StatusCodes.Status200OK)]
+        public async Task<IActionResult> GeneratePage([FromBody] GeneratePageRequest request)
         {
-            // So we can see a long request in the dashboard with a spinning progress wheel
-            Thread.Sleep(2000);
+            var result = await _pageGenerator.GeneratePageAsync(request.Prompt, request.ConversationId, request.IsNewConversation, request.Schema);
 
-            var currentUser = _backOfficeSecurityAccessor.BackOfficeSecurity?.CurrentUser;
-            return currentUser?.Name ?? "I have no idea who you are";
-        }
-
-        [HttpGet("whoAmI")]
-        [ProducesResponseType<IUser>(StatusCodes.Status200OK)]
-        public IUser? WhoAmI() => _backOfficeSecurityAccessor.BackOfficeSecurity?.CurrentUser;
-
-
-        [HttpPost("generate")]
-        [ProducesResponseType(typeof(GenerateResponse), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Generate([FromBody] GenerateRequest request)
-        {
-            var result = await _generator.GenerateTextAsync(request.Prompt, request.ConversationId, request.IsNewConversation);
-
-            return Ok(new GenerateResponse
+            return Ok(new GeneratePageResponse
             {
                 ConversationId = result.ConversationId,
-                Text = result.Text
+                RawOutput = result.RawOutput
             });
         }
 
