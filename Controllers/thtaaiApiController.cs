@@ -21,14 +21,16 @@ namespace thta_ai.Controllers
         private readonly IImageGenerationService _imageGenerator;
 
         private readonly IMediaUploadService _mediaUploadService;
+        private readonly IContentMappingService _contentMappingService;
 
-        public thtaaiApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator, IPageGenerationService pageGenerator, IImageGenerationService imageGenerator, IMediaUploadService mediaUploadService)
+        public thtaaiApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator, IPageGenerationService pageGenerator, IImageGenerationService imageGenerator, IMediaUploadService mediaUploadService, IContentMappingService contentMappingService)
         {
             _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
             _generator = generator;
             _pageGenerator = pageGenerator;
             _imageGenerator = imageGenerator;
             _mediaUploadService = mediaUploadService;
+            _contentMappingService = contentMappingService;
         }
 
         [HttpPost("generatePage")]
@@ -65,9 +67,18 @@ namespace thta_ai.Controllers
                 request.AltText,
                 ct);
 
-            return Ok(new {
+            return Ok(new
+            {
                 mediaKey = result.Key
             });
+        }
+
+        [HttpPost("mapContent")]
+        [ProducesResponseType(typeof(DocumentCreateModel), StatusCodes.Status200OK)]
+        public IActionResult MapContent([FromBody] MapContentRequest request)
+        {
+            var result = _contentMappingService.MapLlmResponse(request.LlmResponse, request.Schema);
+            return Ok(result);
         }
 
         [HttpPost("generateStream")]
