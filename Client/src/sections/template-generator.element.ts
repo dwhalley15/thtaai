@@ -290,7 +290,22 @@ export class TemplateGeneratorView extends UmbLitElement {
         for (const block of blocksConfig.value ?? []) {
             const element = ctx.allTypes.get(block.contentElementTypeKey);
             if (!element) continue;
-            results.push(await this.buildElementTree(element, ctx));
+
+            const elementTree = await this.buildElementTree(element, ctx);
+
+            // Capture area definitions from the block grid config entry
+            const areas = (block.areas ?? []).map((a: any) => ({
+                key: a.key,
+                alias: a.alias ?? a.key,
+                columnSpan: a.columnSpan ?? 1,
+                rowSpan: a.rowSpan ?? 1,
+                allowedBlocks: (a.allowedElementTypeKeys ?? [])
+                    .map((key: string) => ctx.allTypes.get(key))
+                    .filter(Boolean)
+                    .map((el: any) => ({ id: el.id, name: el.name }))
+            }));
+
+            results.push({ ...elementTree, areas });
         }
         return results;
     }
@@ -405,22 +420,22 @@ export class TemplateGeneratorView extends UmbLitElement {
 
                             <uui-table-cell>
                                 ${s.compositions.length === 0
-                                            ? html`<em style="color: var(--uui-color-text-alt);">None</em>`
-                                            : s.compositions.map((c: any) => html`
+                        ? html`<em style="color: var(--uui-color-text-alt);">None</em>`
+                        : s.compositions.map((c: any) => html`
                                         <uui-tag look="secondary" style="margin: 2px;">${c.name}</uui-tag>
                                     `)
-                                        }
+                    }
                             </uui-table-cell>
 
                             <uui-table-cell>
                                 ${s.allowedChildren?.length === 0
-                                            ? html`<em style="color: var(--uui-color-text-alt);">None</em>`
-                                            : s.allowedChildren?.map((c: any) => html`
+                        ? html`<em style="color: var(--uui-color-text-alt);">None</em>`
+                        : s.allowedChildren?.map((c: any) => html`
                                         <uui-tag look="secondary" style="margin: 2px; font-size: 0.75em;">
                                             ${c.name}
                                         </uui-tag>
                                     `)
-                                        }
+                    }
                             </uui-table-cell>
 
                             <uui-table-cell>

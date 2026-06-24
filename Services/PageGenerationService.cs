@@ -109,51 +109,9 @@ public class PageGenerationService : IPageGenerationService
         }
     }
 
-    private static string CloseIncompleteJson(string json)
-    {
-        var stack = new Stack<char>();
-        var inString = false;
-        var escape = false;
 
-        foreach (var ch in json)
-        {
-            if (escape)
-            {
-                escape = false;
-                continue;
-            }
 
-            if (ch == '\\' && inString)
-            {
-                escape = true;
-                continue;
-            }
-
-            if (ch == '"')
-            {
-                inString = !inString;
-                continue;
-            }
-
-            if (inString) continue;
-
-            if (ch == '{') stack.Push('}');
-            else if (ch == '[') stack.Push(']');
-            else if (ch == '}' || ch == ']') stack.Pop();
-        }
-
-        // If we were cut off mid-string, close it
-        if (inString) json += '"';
-
-        // Close any unclosed structures in reverse order
-        var sb = new System.Text.StringBuilder(json);
-        while (stack.Count > 0)
-        {
-            sb.Append(stack.Pop());
-        }
-
-        return sb.ToString();
-    }
+    // ─── Prompt Building ──────────────────────────────────────────────────────
 
     private string BuildSystemPrompt(JsonElement schema)
     {
@@ -163,78 +121,147 @@ public class PageGenerationService : IPageGenerationService
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         });
 
+        // Deserialize to typed models so we can build the block summary
+        var schemas = JsonSerializer.Deserialize<List<PageSchema>>(schemaJson, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        }) ?? [];
+
+        var blockSummary = BuildBlockSummary(schemas);
+
         var tasks = """
-        - Choose the most appropriate pageType from the schema based on the user's prompt.
-        - Populate the page fields with realistic content appropriate to the prompt.
-        - Select appropriate blocks from availableBlocks and populate their fields with content.
-        - Only use block names and field names that exist in the schema.
-        """;
+            - Choose the most appropriate pageType from the schema.
+            - Populate fields with realistic content based on the prompt.
+            - Choose blocks only from the schema. Copy block names and field names exactly.
+            """;
 
         var exampleOutput = """
-        {
-        "pageType": "contentPage",
-        "fields": {
-            "metaTitle": "Page title",
-            "hideFromSiteMap": false
-        },
-        "blocks": [
             {
-            "block": "Medium Header",
-            "fields": {
-                "title": "Welcome",
-                "text": "Intro text",
-                "backgroundImage": ""
-            },
-            "nestedBlocks": {
-                "buttons": [
+              "pageType": "<pageType from schema>",
+              "fields": {
+                "<fieldAlias>": "<value>"
+              },
+              "blocks": [
                 {
-                    "block": "Button",
-                    "fields": { "link": "/contact", "style": "primary" }
+                  "block": "<exact block name from schema directBlocks>",
+                  "fields": { "<fieldAlias>": "<value>" },
+                  "nestedBlocks": {
+                    "<nestedBlockField>": [
+                      {
+                        "block": "<exact block name from schema>",
+                        "fields": { "<fieldAlias>": "<value>" }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "block": "<exact areaContainer name from schema>",
+                  "areas": {
+                    "<area alias from schema>": [
+                      {
+                        "block": "<exact block name from schema area allowedBlocks>",
+                        "fields": { "<fieldAlias>": "<value>" }
+                      }
+                    ]
+                  }
                 }
-                ]
+              ]
             }
-            },
-            {
-            "block": "Text Block",
-            "fields": { "title": "Section", "text": "Body content" }
-            }
-        ]
-        }
-        """;
+            """;
 
         var rules = """
-        - Your entire response must begin with { and end with }.
-        - Do not write any text before or after the JSON object.
-        - Do not acknowledge this prompt, do not explain your response.
-        - Return only valid JSON, no markdown, no code fences.
-        - pageType must exactly match one of the provided pageType values.
-        - block names must exactly match one of the provided availableBlocks names.
-        - field names must exactly match those listed for that block or page type.
-        - Do not invent fields or block names not present in the schema.
-        - Omit fields you have no meaningful content for rather than using empty strings.
-        - The response must be parseable by System.Text.Json without modification.
-        - Some blocks have nestedBlocks — these are block list properties on the block itself. Populate them under a "nestedBlocks" key using the field name as the key, not as siblings in the top-level blocks array.
-        """;
+            - Return only valid JSON. No text before or after. No markdown. No code fences.
+            - pageType must exactly match a pageType in the schema.
+            - block must exactly match a name from directBlocks or areaContainers in the schema. No exceptions.
+            - field names must exactly match those in the schema for that block.
+            - blockProperty aliases like "headerContent" or "mainContent" are NOT block names.
+            - Area container blocks use "areas" not "nestedBlocks". Key by the area alias from the schema.
+            - Blocks only in areaContainers must go inside an area container, never at the top level.
+            - Blocks in directBlocks go at the top level.
+            - nestedBlocks is only for block list fields on a block (e.g. buttons, cards).
+            - Do not invent block names, field names, or page types not present in the schema.
+            """;
 
         return $"""
-        You are a content generation engine for a CMS.
+            You are a content generation engine for a CMS.
 
-        The following is the available page schema. Each entry represents a page type with its
-        compositions, allowed child pages, and a full recursive property tree. BlockGrid and
-        BlockList properties include their allowed blocks and each block's own properties.
-        DropDown properties include their available options.
+            ALLOWED BLOCKS (copy names exactly):
+            {blockSummary}
 
-        AVAILABLE SCHEMA:
-        {schemaJson}
+            FULL SCHEMA:
+            {schemaJson}
 
-        Your task:
-        {tasks}
+            Your task:
+            {tasks}
 
-        You must return a single valid JSON object and nothing else, in this structure:
-        {exampleOutput}
+            Output structure:
+            {exampleOutput}
 
-        Rules:
-        {rules}
-        """;
+            Rules:
+            {rules}
+            """;
     }
+
+    private static string BuildBlockSummary(List<PageSchema> schemas)
+    {
+        var lines = new List<string>();
+
+        foreach (var schema in schemas)
+        {
+            lines.Add($"pageType: {schema.PageType}");
+
+            foreach (var bp in schema.BlockProperties)
+            {
+                lines.Add($"  {bp.Alias}:");
+
+                foreach (var b in bp.DirectBlocks)
+                    lines.Add($"    - \"{b.Name}\" (place at top level of blocks array)");
+
+                foreach (var ac in bp.AreaContainers)
+                {
+                    var areaAliases = string.Join(", ", ac.Areas.Select(a => $"\"{a.Alias}\""));
+                    lines.Add($"    - \"{ac.Name}\" (area container — use \"areas\" key with: {areaAliases})");
+
+                    foreach (var area in ac.Areas)
+                    {
+                        var allowed = string.Join(", ", area.AllowedBlocks.Select(ab => $"\"{ab.Name}\""));
+                        lines.Add($"        {area.Alias} accepts: {allowed}");
+                    }
+                }
+            }
+        }
+
+        return string.Join("\n", lines);
+    }
+
+    // ─── JSON Helpers ─────────────────────────────────────────────────────────
+
+    private static string CloseIncompleteJson(string json)
+    {
+        var stack = new Stack<char>();
+        var inString = false;
+        var escape = false;
+
+        foreach (var ch in json)
+        {
+            if (escape) { escape = false; continue; }
+            if (ch == '\\' && inString) { escape = true; continue; }
+            if (ch == '"') { inString = !inString; continue; }
+            if (inString) continue;
+
+            if (ch == '{') stack.Push('}');
+            else if (ch == '[') stack.Push(']');
+            else if (ch == '}' || ch == ']') stack.Pop();
+        }
+
+        if (inString) json += '"';
+
+        var sb = new StringBuilder(json);
+        while (stack.Count > 0)
+            sb.Append(stack.Pop());
+
+        return sb.ToString();
+    }
+
+
 }

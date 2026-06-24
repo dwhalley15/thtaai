@@ -32,6 +32,8 @@ namespace thta_ai.Composers
 
             builder.Services.AddScoped<IPageGenerationService, PageGenerationService>();
 
+            builder.Services.AddScoped<IContentMappingService, ContentMappingService>();
+
             builder.Services.Configure<AiGenerationOptions>(
                 builder.Config.GetSection("AiGeneration")
             );
