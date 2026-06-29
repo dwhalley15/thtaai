@@ -37,7 +37,11 @@ namespace thta_ai.Controllers
         [ProducesResponseType(typeof(GeneratePageResponse), StatusCodes.Status200OK)]
         public async Task<IActionResult> GeneratePage([FromBody] GeneratePageRequest request)
         {
-            var result = await _pageGenerator.GeneratePageAsync(request.Prompt, request.ConversationId, request.IsNewConversation, request.Schema);
+            var result = await _pageGenerator.GeneratePageAsync(
+                request.Prompt,
+                request.ConversationId,
+                request.IsNewConversation,
+                request.Schema);
 
             return Ok(new GeneratePageResponse
             {

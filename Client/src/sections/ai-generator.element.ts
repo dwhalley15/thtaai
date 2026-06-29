@@ -11,6 +11,8 @@ import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 export class AIGeneratorView extends UmbLitElement {
 
     @state() private _prompt = "";
+    @state() private _schema: any[] = [];
+    @state() private _mappedContent: any = null;
     @state() private _rawOutput = "";
     @state() private _loading = false;
     @state() private _errorMessage: string | null = null;
@@ -27,13 +29,21 @@ export class AIGeneratorView extends UmbLitElement {
         await this._loadParentPages();
     }
 
+    // ─── Auth ─────────────────────────────────────────────────────────────────
+
+    private async _getToken(): Promise<string> {
+        const authContext = await this.getContext(UMB_AUTH_CONTEXT);
+        const token = await authContext?.getLatestToken();
+        if (!token) throw new Error("Could not retrieve auth token.");
+        return token;
+    }
+
     // ─── Parent Pages ─────────────────────────────────────────────────────────
 
     private async _loadParentPages() {
         this._parentLoading = true;
         try {
-            const authContext = await this.getContext(UMB_AUTH_CONTEXT);
-            const token = await authContext?.getLatestToken();
+            const token = await this._getToken();
 
             const res = await fetch("/umbraco/delivery/api/v2/content", {
                 headers: { Authorization: `Bearer ${token}` },
@@ -61,48 +71,48 @@ export class AIGeneratorView extends UmbLitElement {
 
     private async _generate() {
         this._errorMessage = null;
-        this._loading = true;
 
         if (!this._prompt.trim()) {
             this._errorMessage = "Prompt cannot be empty.";
-            this._loading = false;
             return;
         }
+
+        this._loading = true;
 
         if (this._isNewConversation) {
             this._conversationId = crypto.randomUUID();
         }
 
         try {
-            const authContext = await this.getContext(UMB_AUTH_CONTEXT);
-            const token = await authContext?.getLatestToken();
+            const token = await this._getToken();
 
-            const schema = this._getCleanSchema();
-            if (!schema.length) {
-                this._errorMessage = "No page schema found. Please generate the schema first.";
-                this._loading = false;
-                return;
-            }
+            this._schema = this._getRawSchema();
+
+            console.log("Raw schema:", this._schema);
 
             const response = await fetch("/umbraco/thtaai/api/v1/generatePage", {
                 method: "POST",
                 credentials: "include",
                 headers: {
                     "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
                     prompt: this._prompt,
                     conversationId: this._conversationId,
                     isNewConversation: this._isNewConversation,
-                    schema,
-                })
+                    schema: this._schema,
+                }),
             });
 
             if (!response.ok) throw new Error("Generation request failed");
 
-            const { rawOutput } = await response.json();
-            this._rawOutput = JSON.stringify(rawOutput, null, 2);
+            // Only consume the response body once
+            const result = await response.json();
+            this._rawOutput = JSON.stringify(result.rawOutput, null, 2);
+
+            console.log("Raw output:", this._rawOutput);
+
             this._isNewConversation = false;
 
         } catch (error: any) {
@@ -119,57 +129,34 @@ export class AIGeneratorView extends UmbLitElement {
         this._loading = true;
 
         try {
-            const authContext = await this.getContext(UMB_AUTH_CONTEXT);
-            const token = await authContext?.getLatestToken();
+            const token = await this._getToken();
 
             const llmResponse = JSON.parse(this._rawOutput);
-
-            // Find matching schema entry for this page type
-            const rawSchema = this._getRawSchema();
-            const matchingEntry = rawSchema.find((s: any) => s.docType.alias === llmResponse.pageType);
-
-            if (!matchingEntry) {
-                this._errorMessage = `No schema found for page type: ${llmResponse.pageType}`;
-                return;
-            }
-
-            const documentTypeId = matchingEntry.docType.id;
-            const templateId = matchingEntry.docType.allowedTemplates?.[0]?.id ?? null;
-
-            if (!this._selectedParentId) {
-                this._errorMessage = "Please select a parent page.";
-                return;
-            }
-
-            // Step 1: map LLM response to Umbraco document model
-            const cleanSchema = this._getCleanSchema().find(
-                (s: any) => s.pageType === llmResponse.pageType
-            );
-
-            console.log("LLM Response:", llmResponse);
-
-            console.log("Clean Schema for mapping:", cleanSchema);
 
             const mapResponse = await fetch("/umbraco/thtaai/api/v1/mapContent", {
                 method: "POST",
                 credentials: "include",
                 headers: {
                     "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify({
                     llmResponse,
-                    schema: cleanSchema,
-                })
+                    schema: this._schema,
+                }),
             });
 
             if (!mapResponse.ok) throw new Error("Content mapping failed");
 
-            const mapped = await mapResponse.json();
+            this._mappedContent = await mapResponse.json();
 
-            console.log("Mapped content ready for creation:", mapped);
+            console.log("Mapped content:", this._mappedContent);
 
-            // Step 2: fill in document type, parent and template then create
+            const mapped = this._mappedContent as any;
+
+            // documentTypeId and templateId come from the mapped result, not the raw LLM output
+            const { documentTypeId, templateId } = mapped;
+
             const createPayload = {
                 ...mapped,
                 documentType: { id: documentTypeId },
@@ -182,7 +169,7 @@ export class AIGeneratorView extends UmbLitElement {
                 credentials: "include",
                 headers: {
                     "Authorization": `Bearer ${token}`,
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
                 body: JSON.stringify(createPayload),
             });
@@ -193,7 +180,6 @@ export class AIGeneratorView extends UmbLitElement {
             }
 
             const newId = createResponse.headers.get("Umb-Generated-Resource");
-            this._errorMessage = null;
             alert(`Page created successfully! ID: ${newId}`);
 
         } catch (error: any) {
@@ -206,7 +192,6 @@ export class AIGeneratorView extends UmbLitElement {
 
     // ─── Schema Helpers ───────────────────────────────────────────────────────
 
-    /** Raw schema as stored in localStorage — includes docType metadata. */
     private _getRawSchema(): any[] {
         try {
             const raw = localStorage.getItem('umbraco_page_schema');
@@ -216,72 +201,6 @@ export class AIGeneratorView extends UmbLitElement {
         } catch {
             return [];
         }
-    }
-
-    /** Cleaned schema sent to the API — strips docType metadata, keeps field/block structure. */
-    private _getCleanSchema(): any[] {
-        try {
-            return this._getRawSchema().map((s: any) => ({
-                pageType: s.docType.alias,
-                allowedChildren: s.allowedChildren?.map((c: any) => c.alias) ?? [],
-                fields: this._extractSimpleFields(s.properties),
-                blockProperties: this._extractBlockProperties(s.properties),
-            }));
-        } catch {
-            return [];
-        }
-    }
-
-    private _extractBlockProperties(properties: any[]): any[] {
-        return (properties ?? [])
-            .filter((p: any) => p.blocks?.length)
-            .map((p: any) => ({
-                alias: p.alias,
-                editorAlias: p.type,
-                // Separate area containers from direct blocks
-                areaContainers: p.blocks
-                    .filter((b: any) => b.areas?.length > 0)
-                    .map((b: any) => this._extractAreaContainer(b)),
-                directBlocks: p.blocks
-                    .filter((b: any) => !b.areas?.length)
-                    .map((b: any) => this._extractBlockDefinition(b)),
-            }));
-    }
-
-    private _extractAreaContainer(b: any): any {
-        return {
-            id: b.id,
-            name: b.name,
-            isAreaContainer: true,
-            areas: b.areas.map((a: any) => ({
-                key: a.key,
-                alias: a.alias ?? a.key,
-                allowedBlocks: a.allowedBlocks?.map((ab: any) => this._extractBlockDefinition(ab)) ?? [],
-            })),
-        };
-    }
-
-    private _extractBlockDefinition(b: any): any {
-        return {
-            id: b.id,
-            name: b.name,
-            areas: b.areas ?? [],  // ← add this
-            fields: (b.properties ?? [])
-                .filter((p: any) => !p.blocks?.length)
-                .map((p: any) => ({ alias: p.alias, editorAlias: p.type })),
-            nestedBlocks: (b.properties ?? [])
-                .filter((p: any) => p.blocks?.length)
-                .map((p: any) => ({
-                    field: p.alias,
-                    allowedBlocks: p.blocks.map((nb: any) => this._extractBlockDefinition(nb)),
-                })),
-        };
-    }
-
-    private _extractSimpleFields(properties: any[]): string[] {
-        return (properties ?? [])
-            .filter((p: any) => !p.blocks?.length)
-            .map((p: any) => p.alias);
     }
 
     // ─── Rendering ────────────────────────────────────────────────────────────
@@ -308,30 +227,32 @@ export class AIGeneratorView extends UmbLitElement {
 
                     <uui-form-layout-item label="Parent Page">
                         ${this._parentLoading
-                ? html`<uui-loader></uui-loader>`
-                : html`
-                                            <h4>Select the Parent Page</h4>
-                                            <uui-select label="Parent Page" placeholder="Select a parent page"
-                                                .options=${this._parentPages.map(p => ({
-                    name: p.name,
-                    value: p.id,
-                    selected: p.id === this._selectedParentId,
-                }))}
-                                                                @change=${(e: Event) => {
-                        this._selectedParentId = (e.target as HTMLSelectElement).value;
-                    }}>
-                                                </uui-select>
+                            ? html`<uui-loader></uui-loader>`
+                            : html`
+                                <h4>Select the Parent Page</h4>
+                                <uui-select
+                                    label="Parent Page"
+                                    placeholder="Select a parent page"
+                                    .options=${this._parentPages.map(p => ({
+                                        name: p.name,
+                                        value: p.id,
+                                        selected: p.id === this._selectedParentId,
+                                    }))}
+                                    @change=${(e: Event) => {
+                                        this._selectedParentId = (e.target as HTMLSelectElement).value;
+                                    }}>
+                                </uui-select>
                             `}
-                                </uui-form-layout-item>
+                    </uui-form-layout-item>
 
-                                <uui-form-layout-item label="Prompt">
-                                    <uui-textarea
-                                        .value=${this._prompt}
-                                        placeholder="Describe the page you want to generate..."
-                                        label="Prompt"
-                                        @input=${(e: Event) => {
-                this._prompt = (e.target as HTMLTextAreaElement).value;
-            }}>
+                    <uui-form-layout-item label="Prompt">
+                        <uui-textarea
+                            .value=${this._prompt}
+                            placeholder="Describe the page you want to generate..."
+                            label="Prompt"
+                            @input=${(e: Event) => {
+                                this._prompt = (e.target as HTMLTextAreaElement).value;
+                            }}>
                         </uui-textarea>
                     </uui-form-layout-item>
 
