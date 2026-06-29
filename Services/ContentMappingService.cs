@@ -2,55 +2,45 @@ using thta_ai.Models;
 
 public class ContentMappingService : IContentMappingService
 {
+    // ─── LLM Response Mapping ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Maps an LLM page response to a DocumentCreateModel using the provided schema.
+    /// </summary>
     public DocumentCreateModel MapLlmResponse(LlmPageResponse llmResponse, PageSchema schema)
     {
         var values = new List<PropertyValueModel>();
 
-        // Simple fields
+        // Simple page-level fields
         foreach (var (alias, value) in llmResponse.Fields)
         {
             values.Add(new PropertyValueModel { Alias = alias, Value = value });
         }
 
-        // Build a lookup: block name → schema block definition (top-level)
+        // Block name → (owning BlockProperty, BlockDefinition) — safe against duplicate names
         var blockLookup = schema.BlockProperties
             .SelectMany(bp => bp.AllBlocks.Select(b => (bp, b)))
+            .DistinctBy(x => x.b.Name)
             .ToDictionary(x => x.b.Name, x => (BlockProperty: x.bp, BlockDef: x.b));
 
-        // Build a flat lookup for nested block definitions
-        // Full definitions available: direct blocks + area containers themselves
-        var allBlockDefinitions = schema.BlockProperties
+        // Full block definitions by name — used to resolve nested/area block content
+        var allBlockDefs = schema.BlockProperties
             .SelectMany(bp => bp.AllBlocks)
             .DistinctBy(b => b.Name)
             .ToDictionary(b => b.Name, b => b);
-
-        // Names of blocks allowed inside areas or as nested block list items
-        var nestedBlockLookup = schema.BlockProperties
-            .SelectMany(bp => bp.DirectBlocks)
-            .SelectMany(b => b.NestedBlocks)
-            .SelectMany(nb => nb.AllowedBlocks.Select(ab => ab.Name))
-            .Concat(schema.BlockProperties
-                .SelectMany(bp => bp.AreaContainers)
-                .SelectMany(ac => ac.Areas)
-                .SelectMany(a => a.AllowedBlocks.Select(ab => ab.Name)))
-            .Distinct()
-            // Resolve name → full BlockDefinition from directBlocks (where full defs live)
-            .Select(name => schema.BlockProperties
-                .SelectMany(bp => bp.DirectBlocks)
-                .FirstOrDefault(b => b.Name == name))
-            .Where(b => b is not null)
-            .DistinctBy(b => b!.Name)
-            .ToDictionary(b => b!.Name, b => b!);
 
         // Group LLM blocks by their owning property alias
         var blocksByAlias = new Dictionary<string, List<LlmBlock>>();
         foreach (var llmBlock in llmResponse.Blocks)
         {
-            if (!blockLookup.TryGetValue(llmBlock.Block, out var match)) continue;
+            if (!blockLookup.TryGetValue(llmBlock.Name, out var match)) continue;
             var alias = match.BlockProperty.Alias;
-            if (!blocksByAlias.ContainsKey(alias))
-                blocksByAlias[alias] = new();
-            blocksByAlias[alias].Add(llmBlock);
+            if (!blocksByAlias.TryGetValue(alias, out var list))
+            {
+                list = [];
+                blocksByAlias[alias] = list;
+            }
+            list.Add(llmBlock);
         }
 
         // Build each block property value
@@ -58,8 +48,8 @@ public class ContentMappingService : IContentMappingService
         {
             var schemaProp = schema.BlockProperties.First(bp => bp.Alias == alias);
             var value = schemaProp.EditorAlias == "Umbraco.BlockGrid"
-                ? (object)BuildBlockGridValue(blocks, blockLookup, nestedBlockLookup)
-                : (object)BuildBlockListValue(blocks, nestedBlockLookup);
+                ? (object)BuildBlockGridValue(blocks, blockLookup, allBlockDefs)
+                : (object)BuildBlockListValue(blocks, allBlockDefs);
 
             values.Add(new PropertyValueModel
             {
@@ -73,74 +63,65 @@ public class ContentMappingService : IContentMappingService
         return new DocumentCreateModel
         {
             Values = values,
-            Variants = [new() { Culture = null, Segment = null, Name = llmResponse.Fields.GetValueOrDefault("title")?.ToString() ?? "New Page" }]
+            Variants =
+            [
+                new()
+                {
+                    Culture = null,
+                    Segment = null,
+                    Name = llmResponse.Fields.GetValueOrDefault("title")?.ToString() ?? "New Page"
+                }
+            ]
         };
     }
 
     // ─── Block Grid ───────────────────────────────────────────────────────────
 
     private BlockGridValue BuildBlockGridValue(
-    List<LlmBlock> blocks,
-    Dictionary<string, (BlockPropertySchema BlockProperty, BlockDefinition BlockDef)> blockLookup,
-    Dictionary<string, BlockDefinition> nestedBlockLookup)
+        List<LlmBlock> blocks,
+        Dictionary<string, (BlockPropertySchema BlockProperty, BlockDefinition BlockDef)> blockLookup,
+        Dictionary<string, BlockDefinition> allBlockDefs)
     {
         var layout = new List<object>();
         var contentData = new List<Dictionary<string, object?>>();
 
         foreach (var llmBlock in blocks)
         {
-            if (!blockLookup.TryGetValue(llmBlock.Block, out var match)) continue;
+            if (!blockLookup.TryGetValue(llmBlock.Name, out var match)) continue;
 
             var blockDef = match.BlockDef;
-            var id = Guid.NewGuid().ToString("N");
-            var udi = $"umb://element/{id}";
+            var udi = NewUdi();
 
             if (blockDef.Areas.Any())
             {
-                // This is an area container — place inner blocks into its areas
+                // Area container — distribute inner blocks into their respective areas
                 var areaLayouts = new List<object>();
 
                 foreach (var area in blockDef.Areas)
                 {
-                    // Find inner blocks the LLM assigned to this area
-                    // Convention: LLM puts them in nestedBlocks keyed by area alias
-                    var innerLlmBlocks = llmBlock.Areas
-                        ?.GetValueOrDefault(area.Alias)
-                        ?? llmBlock.Areas?.GetValueOrDefault(area.Key)
-                        ?? [];
-
+                    var innerLlmBlocks = llmBlock.Areas?.GetValueOrDefault(area.Alias) ?? [];
                     var areaItems = new List<object>();
 
                     foreach (var innerLlmBlock in innerLlmBlocks)
                     {
-                        // Inner blocks resolve from nestedBlockLookup OR blockLookup
-                        BlockDefinition? innerDef = null;
-                        if (nestedBlockLookup.TryGetValue(innerLlmBlock.Block, out var nd))
-                            innerDef = nd;
-                        else if (blockLookup.TryGetValue(innerLlmBlock.Block, out var bm))
-                            innerDef = bm.BlockDef;
+                        if (!allBlockDefs.TryGetValue(innerLlmBlock.Name, out var innerDef)) continue;
 
-                        if (innerDef is null) continue;
-
-                        var innerId = Guid.NewGuid().ToString("N");
-                        var innerUdi = $"umb://element/{innerId}";
-
+                        var innerUdi = NewUdi();
                         areaItems.Add(new { contentUdi = innerUdi, areas = Array.Empty<object>() });
-                        contentData.Add(BuildContentEntry(innerUdi, innerDef, innerLlmBlock, nestedBlockLookup));
+                        contentData.Add(BuildContentEntry(innerUdi, innerDef, innerLlmBlock, allBlockDefs));
                     }
 
-                    areaLayouts.Add(new { key = area.Key, items = areaItems });
+                    areaLayouts.Add(new { key = area.Alias, items = areaItems });
                 }
 
                 layout.Add(new { contentUdi = udi, areas = areaLayouts });
             }
             else
             {
-                // Regular block — no areas
                 layout.Add(new { contentUdi = udi, areas = Array.Empty<object>() });
             }
 
-            contentData.Add(BuildContentEntry(udi, blockDef, llmBlock, nestedBlockLookup));
+            contentData.Add(BuildContentEntry(udi, blockDef, llmBlock, allBlockDefs));
         }
 
         return new BlockGridValue
@@ -154,21 +135,19 @@ public class ContentMappingService : IContentMappingService
     // ─── Block List ───────────────────────────────────────────────────────────
 
     private BlockListValue BuildBlockListValue(
-    IEnumerable<LlmBlock> blocks,
-    Dictionary<string, BlockDefinition> nestedBlockLookup)
+        IEnumerable<LlmBlock> blocks,
+        Dictionary<string, BlockDefinition> allBlockDefs)
     {
         var layout = new List<BlockGridLayoutItem>();
         var contentData = new List<Dictionary<string, object?>>();
 
         foreach (var llmBlock in blocks)
         {
-            if (!nestedBlockLookup.TryGetValue(llmBlock.Block, out var blockDef)) continue;
+            if (!allBlockDefs.TryGetValue(llmBlock.Name, out var blockDef)) continue;
 
-            var id = Guid.NewGuid().ToString("N");
-            var udi = $"umb://element/{id}";
-
+            var udi = NewUdi();
             layout.Add(new BlockGridLayoutItem { ContentUdi = udi, Areas = [] });
-            contentData.Add(BuildContentEntry(udi, blockDef, llmBlock, nestedBlockLookup));
+            contentData.Add(BuildContentEntry(udi, blockDef, llmBlock, allBlockDefs));
         }
 
         return new BlockListValue
@@ -182,10 +161,10 @@ public class ContentMappingService : IContentMappingService
     // ─── Content Entry ────────────────────────────────────────────────────────
 
     private Dictionary<string, object?> BuildContentEntry(
-    string udi,
-    BlockDefinition blockDef,
-    LlmBlock llmBlock,
-    Dictionary<string, BlockDefinition> nestedBlockLookup)
+        string udi,
+        BlockDefinition blockDef,
+        LlmBlock llmBlock,
+        Dictionary<string, BlockDefinition> allBlockDefs)
     {
         var entry = new Dictionary<string, object?>
         {
@@ -193,7 +172,6 @@ public class ContentMappingService : IContentMappingService
             ["udi"] = udi,
         };
 
-        // Build a field lookup so we can check editor alias per field
         var fieldLookup = blockDef.Fields.ToDictionary(f => f.Alias, f => f.EditorAlias);
 
         foreach (var (key, val) in llmBlock.Fields)
@@ -202,16 +180,18 @@ public class ContentMappingService : IContentMappingService
             entry[key] = TransformFieldValue(val, editorAlias);
         }
 
-        if (llmBlock.NestedBlocks != null)
+        if (llmBlock.NestedBlocks is not null)
         {
             foreach (var (nestedAlias, nestedBlocks) in llmBlock.NestedBlocks)
             {
-                entry[nestedAlias] = BuildBlockListValue(nestedBlocks, nestedBlockLookup);
+                entry[nestedAlias] = BuildBlockListValue(nestedBlocks, allBlockDefs);
             }
         }
 
         return entry;
     }
+
+    // ─── Field Transform ──────────────────────────────────────────────────────
 
     private static object? TransformFieldValue(object? value, string editorAlias)
     {
@@ -224,15 +204,15 @@ public class ContentMappingService : IContentMappingService
             // Multi URL Picker — wrap plain string in Umbraco's expected link format
             "Umbraco.MultiUrlPicker" => string.IsNullOrWhiteSpace(str) ? null : new[]
             {
-            new
-            {
-                name = (string?)null,
-                type = "url",
-                url = str,
-                unique = (string?)null,
-                target = "_self"
-            }
-        },
+                new
+                {
+                    name = (string?)null,
+                    type = "url",
+                    url = str,
+                    unique = (string?)null,
+                    target = "_self"
+                }
+            },
 
             // Flexible dropdown — value must be an array
             "Umbraco.DropDown.Flexible" => string.IsNullOrWhiteSpace(str) ? null : new[] { str },
@@ -243,8 +223,13 @@ public class ContentMappingService : IContentMappingService
             // Checkbox
             "Umbraco.TrueFalse" => value is bool b ? b : str.Equals("true", StringComparison.OrdinalIgnoreCase),
 
-            // Everything else — pass through as-is
+            // Pass through as-is
             _ => value,
         };
     }
+
+    // ─── Helpers ──────────────────────────────────────────────────────────────
+
+    private static string NewUdi() =>
+        $"umb://element/{Guid.NewGuid():N}";
 }
