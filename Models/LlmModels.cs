@@ -19,9 +19,29 @@ public record LlmPlanningPageType
 
 public class LlmRegion
 {
-    public string Name { get; set; }  
+    public string Name { get; set; } = "";
+    public List<LlmPlanningBlockDef> DirectBlocks { get; set; } = [];
+    public List<LlmAreaContainer> AreaContainers { get; set; } = [];
+}
+
+public record LlmPlanningBlockDef
+{
+    public string Name { get; init; } = "";
+    public List<LlmNestedSlot> NestedSlots { get; init; } = [];
+
+    public List<LlmPlanningArea>? AreaContainerAreas { get; init; } = null;
+}
+
+public record LlmNestedSlot
+{
+    public string Alias { get; init; } = "";    
+    public List<string> AllowedBlocks { get; init; } = []; 
+}
+
+public class LlmAreaContainer
+{
+    public string BlockName { get; set; } = "";
     public List<LlmPlanningArea> Areas { get; set; } = [];
-    public List<string> AllowedBlocks { get; set; } = [];
 }
 
 public record LlmPlanningArea
