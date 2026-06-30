@@ -22,36 +22,21 @@ public class PageGenerationService : IPageGenerationService
     }
 
     public async Task<GeneratePageResponse> GeneratePageAsync(
-    string prompt,
-    Guid conversationId,
-    bool isNewConversation,
-    JsonElement schema,
-    CancellationToken cancellationToken = default)
+    string prompt, Guid conversationId, bool isNewConversation,
+    JsonElement schema, CancellationToken cancellationToken = default)
     {
         var planningSchema = MapRawSchemaToPlanning(schema);
         Log("PLANNING SCHEMA (pre-serialise)", JsonSerializer.Serialize(planningSchema, new JsonSerializerOptions { WriteIndented = true }));
 
-        // STEP 1: PLAN
-        var plan = await PlanPageWithRetryAsync(
-            prompt,
-            conversationId,
-            planningSchema,
-            cancellationToken);
+        // STEP 1: PLAN (retries until a structurally valid plan is produced)
+        var plan = await PlanPageWithRetryAsync(prompt, conversationId, planningSchema, cancellationToken);
 
-        // STEP 2: EXPAND PLAN -> EMPTY SHELL
+        // STEP 2: EXPAND -> EMPTY SHELL (deterministic, no LLM, no validation needed)
         var pageShell = ExpandPlanFromRaw(plan, schema);
+        Log("PAGE SHELL", JsonSerializer.Serialize(pageShell, new JsonSerializerOptions { WriteIndented = true }));
 
-        var pageValidation = ValidatePage(pageShell, planningSchema);
-        if (!pageValidation.IsValid)
-        {
-            Log("PAGE VALIDATION FAILED", string.Join("\n", pageValidation.Errors));
-            throw new InvalidOperationException("Invalid page shell");
-        }
-
-        // STEP 3: FILL CONTENT
-        // Want to add retry logic to validate the page too.
-        // May want to use a new conversation id for this request if we use the retry as may get confused.
-        var finalPage = await GenerateContentAsync(prompt, conversationId, pageShell, cancellationToken);
+        // STEP 3: FILL CONTENT (retries until all fields are filled correctly)
+        var finalPage = await GenerateContentWithRetryAsync(prompt, conversationId, pageShell, cancellationToken);
 
         return new GeneratePageResponse
         {
@@ -88,7 +73,7 @@ public class PageGenerationService : IPageGenerationService
         var json = ExtractJson(content);
         Log("PLAN EXTRACTED JSON", json.GetRawText());
 
-        return JsonSerializer.Deserialize<LlmPagePlan>(json.GetRawText())!;
+        return JsonSerializer.Deserialize<LlmPagePlan>(json.GetRawText(), LlmJsonOptions)!;
     }
 
     private async Task<LlmPageResponse> GenerateContentAsync(
@@ -112,10 +97,35 @@ public class PageGenerationService : IPageGenerationService
         var json = ExtractJson(content);
         Log("CONTENT EXTRACTED JSON", json.GetRawText());
 
-        return JsonSerializer.Deserialize<LlmPageResponse>(json.GetRawText())!;
+        return JsonSerializer.Deserialize<LlmPageResponse>(json.GetRawText(), LlmJsonOptions)!;
     }
 
     // ─── LLM RETRY LOGIC ─────────────────────────────────────────────────────
+
+    private async Task<LlmPageResponse> GenerateContentWithRetryAsync(
+    string prompt, Guid conversationId, LlmPageResponse pageShell, CancellationToken ct)
+    {
+        List<string> lastErrors = [];
+        var currentPrompt = prompt;
+
+        for (int attempt = 0; attempt <= _options.MaxContentRetries; attempt++)
+        {
+            var filledPage = await GenerateContentAsync(currentPrompt, conversationId, pageShell, ct);
+            Log("CONTENT FILLED PAGE", JsonSerializer.Serialize(filledPage, new JsonSerializerOptions { WriteIndented = true }));
+
+            var validation = ValidateContent(pageShell, filledPage);
+            if (validation.IsValid)
+                return filledPage;
+
+            lastErrors = validation.Errors;
+            Log("CONTENT VALIDATION FAILED", string.Join("\n", lastErrors));
+
+            currentPrompt = BuildContentFixPrompt(prompt, lastErrors, pageShell);
+        }
+
+        throw new InvalidOperationException(
+            "LLM failed to produce valid content after retries:\n" + string.Join("\n", lastErrors));
+    }
 
     private async Task<LlmPagePlan> PlanPageWithRetryAsync(
     string prompt,
@@ -198,8 +208,6 @@ public class PageGenerationService : IPageGenerationService
             var docType = page.GetProperty("docType");
             var alias = docType.GetProperty("alias").GetString() ?? "";
 
-            // Skip page types that have no BlockGrid properties at all — they
-            // have nothing for the LLM to plan (e.g. siteMap).
             var blockGridProps = page.GetProperty("properties")
                 .EnumerateArray()
                 .Where(p => p.GetProperty("type").GetString() is "Umbraco.BlockGrid")
@@ -213,13 +221,7 @@ public class PageGenerationService : IPageGenerationService
             foreach (var prop in blockGridProps)
             {
                 var regionAlias = prop.GetProperty("alias").GetString() ?? "";
-
-                var region = new LlmRegion
-                {
-                    Name = regionAlias,
-                    Areas = [],
-                    AllowedBlocks = []
-                };
+                var region = new LlmRegion { Name = regionAlias };
 
                 if (!prop.TryGetProperty("blocks", out var blocks))
                 {
@@ -227,42 +229,67 @@ public class PageGenerationService : IPageGenerationService
                     continue;
                 }
 
+                var containerBlocks = new List<JsonElement>();
+                var nonContainerBlocks = new List<JsonElement>();
+
                 foreach (var block in blocks.EnumerateArray())
                 {
-                    var blockName = block.GetProperty("name").GetString() ?? "";
                     var hasAreas = block.TryGetProperty("areas", out var areas) && areas.GetArrayLength() > 0;
+                    if (hasAreas)
+                        containerBlocks.Add(block);
+                    else
+                        nonContainerBlocks.Add(block);
+                }
 
-                    if (!hasAreas)
-                    {
-                        region.AllowedBlocks.Add(blockName);
-                        continue;
-                    }
+                // Names of all non-container blocks in this region — used to populate
+                // area "allowed" lists when the raw schema's allowedBlocks is empty (= "any").
+                var nonContainerNames = nonContainerBlocks
+                    .Select(b => b.GetProperty("name").GetString() ?? "")
+                    .ToList();
 
-                    // Area container block — add the container itself to AllowedBlocks
-                    // and expose its areas so the LLM knows what can go inside.
-                    region.AllowedBlocks.Add(blockName);
+                foreach (var block in containerBlocks)
+                {
+                    var blockName = block.GetProperty("name").GetString() ?? "";
+                    var container = new LlmAreaContainer { BlockName = blockName };
 
-                    foreach (var area in areas.EnumerateArray())
+                    foreach (var area in block.GetProperty("areas").EnumerateArray())
                     {
                         var areaAlias = area.GetProperty("alias").GetString() ?? "";
                         var columnSpan = area.TryGetProperty("columnSpan", out var cs) ? cs.GetInt32() : 1;
 
-                        if (region.Areas.Any(a => a.Alias == areaAlias))
-                            continue;
-
                         var allowedInArea = new List<string>();
-                        if (area.TryGetProperty("allowedBlocks", out var allowedBlocks))
+                        if (area.TryGetProperty("allowedBlocks", out var allowedBlocks) && allowedBlocks.GetArrayLength() > 0)
                         {
                             foreach (var allowed in allowedBlocks.EnumerateArray())
                                 allowedInArea.Add(allowed.GetProperty("name").GetString() ?? "");
                         }
+                        else
+                        {
+                            // Empty allowedBlocks in Umbraco means "any block" — use the
+                            // region's non-container blocks as the concrete allowed list.
+                            allowedInArea.AddRange(nonContainerNames);
+                        }
 
-                        region.Areas.Add(new LlmPlanningArea
+                        container.Areas.Add(new LlmPlanningArea
                         {
                             Alias = areaAlias,
                             ColumnSpan = columnSpan,
                             AllowedBlocks = allowedInArea
                         });
+                    }
+
+                    region.AreaContainers.Add(container);
+                }
+
+                // Only treat non-container blocks as direct (root-level) blocks
+                // if this region has NO area containers at all. Otherwise they
+                // belong exclusively inside the containers' areas.
+                if (containerBlocks.Count == 0)
+                {
+                    foreach (var block in nonContainerBlocks)
+                    {
+                        var blockName = block.GetProperty("name").GetString() ?? "";
+                        region.DirectBlocks.Add(BuildPlanningBlockDef(blockName, block));
                     }
                 }
 
@@ -273,6 +300,33 @@ public class PageGenerationService : IPageGenerationService
         }
 
         return result;
+    }
+
+    private LlmPlanningBlockDef BuildPlanningBlockDef(string name, JsonElement blockDef)
+    {
+        var slots = new List<LlmNestedSlot>();
+
+        if (blockDef.TryGetProperty("properties", out var props))
+        {
+            foreach (var prop in props.EnumerateArray())
+            {
+                var propType = prop.GetProperty("type").GetString();
+                if (propType is not ("Umbraco.BlockList" or "Umbraco.BlockGrid")) continue;
+
+                var alias = prop.GetProperty("alias").GetString() ?? "";
+                var allowed = new List<string>();
+
+                if (prop.TryGetProperty("blocks", out var nestedBlocks))
+                {
+                    foreach (var nb in nestedBlocks.EnumerateArray())
+                        allowed.Add(nb.GetProperty("name").GetString() ?? "");
+                }
+
+                slots.Add(new LlmNestedSlot { Alias = alias, AllowedBlocks = allowed });
+            }
+        }
+
+        return new LlmPlanningBlockDef { Name = name, NestedSlots = slots };
     }
 
     private LlmPageResponse ExpandPlanFromRaw(LlmPagePlan plan, JsonElement rawSchema)
@@ -407,6 +461,34 @@ public class PageGenerationService : IPageGenerationService
 
     // ─── Prompt Building ──────────────────────────────────────────────────────
 
+    private string BuildContentFixPrompt(string originalPrompt, List<string> errors, LlmPageResponse shell)
+    {
+        var json = JsonSerializer.Serialize(shell, new JsonSerializerOptions
+        {
+            WriteIndented = true,
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        });
+
+        return $"""
+        Your previous response was incomplete or invalid. Fix it and return only raw JSON.
+
+        ORIGINAL REQUEST: {originalPrompt}
+
+        ERRORS TO FIX:
+        {string.Join("\n", errors)}
+
+        RULES:
+        - Return the COMPLETE JSON structure unchanged — same keys, same nesting, same arrays
+        - Fill EVERY empty string ("") with realistic content
+        - Do NOT add, remove, or rename any keys
+        - Do NOT wrap in markdown
+        - Return valid JSON only
+
+        INPUT:
+        {json}
+        """;
+    }
+
     private string BuildPlanFixPrompt(string originalPrompt, List<string> errors, LlmPlanningSchema schema)
     {
         var sb = new StringBuilder();
@@ -416,7 +498,37 @@ public class PageGenerationService : IPageGenerationService
             foreach (var r in pt.Regions)
             {
                 sb.AppendLine($"  REGION: {r.Name}");
-                sb.AppendLine($"    AllowedBlocks: {string.Join(", ", r.AllowedBlocks)}");
+
+                foreach (var b in r.DirectBlocks)
+                {
+                    if (b.NestedSlots.Count == 0)
+                    {
+                        sb.AppendLine($"    Block: {b.Name}");
+                    }
+                    else
+                    {
+                        sb.AppendLine($"    Block: {b.Name}");
+                        foreach (var slot in b.NestedSlots)
+                        {
+                            var allowed = slot.AllowedBlocks.Count > 0
+                                ? string.Join(", ", slot.AllowedBlocks)
+                                : "any block";
+                            sb.AppendLine($"      nested slot \"{slot.Alias}\": {allowed}");
+                        }
+                    }
+                }
+
+                foreach (var c in r.AreaContainers)
+                {
+                    sb.AppendLine($"    Area container: {c.BlockName}");
+                    foreach (var area in c.Areas)
+                    {
+                        var allowed = area.AllowedBlocks.Count > 0
+                            ? string.Join(", ", area.AllowedBlocks)
+                            : "any block";
+                        sb.AppendLine($"      area alias \"{area.Alias}\": {allowed}");
+                    }
+                }
             }
         }
 
@@ -432,7 +544,7 @@ public class PageGenerationService : IPageGenerationService
         {sb.ToString().TrimEnd()}
 
         RULES:
-        - Use only the pageTypes and block names listed above
+        - Use only the pageTypes, block names, area aliases, and nested slot names listed above
         - Match the regions array structure exactly as shown in the original prompt
         - Return valid JSON only, no markdown
         """;
@@ -451,67 +563,95 @@ public class PageGenerationService : IPageGenerationService
             {
                 sb.AppendLine($"  REGION: {region.Name}");
 
-                var directBlocks = region.AllowedBlocks
-                    .Where(b => !region.Areas.Any(a => a.Alias == b))
-                    .ToList();
-
-                if (directBlocks.Count > 0)
-                    sb.AppendLine($"    Direct blocks: {string.Join(", ", directBlocks)}");
-
-                // List area-container blocks with their area aliases
-                var areaContainerNames = new[] { "One Column Area", "Two Column Area", "Three Column Area" };
-                var containers = region.AllowedBlocks.Where(b => areaContainerNames.Contains(b)).ToList();
-
-                foreach (var container in containers)
+                if (region.DirectBlocks.Count > 0)
                 {
-                    sb.AppendLine($"    Area container: {container}");
-                    foreach (var area in region.Areas)
-                        sb.AppendLine($"      - area alias \"{area.Alias}\" (span {area.ColumnSpan}) — any direct block may go here");
+                    sb.AppendLine("    Direct blocks:");
+                    foreach (var b in region.DirectBlocks)
+                    {
+                        if (b.NestedSlots.Count == 0)
+                        {
+                            sb.AppendLine($"      - {b.Name}");
+                        }
+                        else
+                        {
+                            sb.AppendLine($"      - {b.Name}");
+                            foreach (var slot in b.NestedSlots)
+                            {
+                                var allowed = slot.AllowedBlocks.Count > 0
+                                    ? string.Join(", ", slot.AllowedBlocks)
+                                    : "any block";
+                                sb.AppendLine($"          nested slot \"{slot.Alias}\": {allowed}");
+                            }
+                        }
+                    }
+                }
+
+                foreach (var container in region.AreaContainers)
+                {
+                    sb.AppendLine($"    Area container: {container.BlockName}");
+                    foreach (var area in container.Areas)
+                    {
+                        var allowed = area.AllowedBlocks.Count > 0
+                            ? string.Join(", ", area.AllowedBlocks)
+                            : "any block";
+                        sb.AppendLine($"      - area alias \"{area.Alias}\" (span {area.ColumnSpan}) — allowed: {allowed}");
+                    }
                 }
             }
             sb.AppendLine();
         }
 
         return $$"""
-        You are a CMS page layout planning engine. Select a page type and the blocks to use. Do NOT fill in any content.
+            You are a CMS page layout planning engine. Select a page type and the blocks to use. Do NOT fill in any content.
 
-        ## AVAILABLE PAGE TYPES AND BLOCKS
-        {{sb.ToString().TrimEnd()}}
+            ## AVAILABLE PAGE TYPES AND BLOCKS
+            {{sb.ToString().TrimEnd()}}
 
-        ## RULES
-        - Choose exactly ONE pageType (use the exact name shown above)
-        - Choose blocks only from the "Direct blocks" list for each region
-        - Area containers (One Column Area, Two Column Area, Three Column Area) hold other blocks inside named areas
-        - Do NOT invent block or region names
-        - Do NOT fill in any content or field values
-        - Return ONLY raw JSON, no markdown, no explanation
+            ## RULES
+            - Choose exactly ONE pageType (use the exact name shown above)
+            - Choose direct blocks only from each region's "Direct blocks" list
+            - Some direct blocks have nested slots (e.g. "buttons", "accordions") — you may add 0 or more blocks from that slot's allowed list into "nestedBlocks"
+            - Area containers (e.g. One Column Area, Two Column Area, Three Column Area) hold other blocks inside their named areas — only place blocks from an area's "allowed" list into that area
+            - Do NOT invent block, region, area, or nested slot names
+            - Do NOT fill in any content or field values
+            - Return ONLY raw JSON, no markdown, no explanation
 
-        ## OUTPUT FORMAT — follow exactly
-        {
-          "pageType": "contentPage",
-          "regions": [
+            ## OUTPUT FORMAT
+            The structure below is an ILLUSTRATIVE EXAMPLE ONLY — it shows the JSON shape, not a template to copy.
+            The block names, area aliases, nested slots, region names, and number of blocks used here are made up
+            and will NOT match the real schema above. You must build the actual JSON using real names taken from
+            the "AVAILABLE PAGE TYPES AND BLOCKS" section, choosing whatever blocks and counts genuinely fit the
+            page being requested — not what's shown below.
+
             {
-              "name": "headerContent",
-              "blocks": [
-                { "id": "Medium Header", "areas": {} }
-              ]
-            },
-            {
-              "name": "mainContent",
-              "blocks": [
-                { "id": "Text Block", "areas": {} },
+            "pageType": "<a real pageType name from above>",
+            "regions": [
                 {
-                  "id": "Two Column Area",
-                  "areas": {
-                    "left-column": [{ "id": "Text Block" }],
-                    "right-column": [{ "id": "Media Block" }]
-                  }
+                "name": "<a real region name>",
+                "blocks": [
+                    {
+                    "id": "<a real direct-block name allowed in this region>",
+                    "areas": {},
+                    "nestedBlocks": {
+                        "<a real nested slot alias>": [{ "id": "<a real allowed block name>" }]
+                    }
+                    },
+                    {
+                    "id": "<a real area-container block name>",
+                    "areas": {
+                        "<a real area alias>": [{ "id": "<a real allowed block name>" }]
+                    }
+                    }
+                ]
                 }
-              ]
+            ]
             }
-          ]
-        }
-        """;
+
+            Notes on the example above:
+            - "blocks" can contain any number of entries (zero or more), not exactly two
+            - "areas" and "nestedBlocks" should only be included when the chosen block actually has them, and may contain zero or more entries
+            - "regions" should include every region you're using content for, each with as many or as few blocks as makes sense
+            """;
     }
 
     private string BuildContentPrompt(LlmPageResponse page)
@@ -537,7 +677,12 @@ public class PageGenerationService : IPageGenerationService
                 """;
     }
 
-    // ─── JSON Helpers ─────────────────────────────────────────────────────────
+    // ─── Helpers ─────────────────────────────────────────────────────────
+
+    private static readonly JsonSerializerOptions LlmJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     private static JsonElement ExtractJson(string content)
     {
@@ -662,6 +807,12 @@ public class PageGenerationService : IPageGenerationService
             return new ValidationResult { IsValid = false, Errors = errors };
         }
 
+        // Lookup of every block definition in the schema by name, regardless of
+        // whether it's a region-level direct block, an area container, an
+        // area-allowed block, or a nested-slot block. Used to recursively
+        // validate children's own structure.
+        var allBlockDefsByName = BuildBlockDefLookup(schema);
+
         foreach (var regionPlan in plan.Regions)
         {
             var region = pageType.Regions.FirstOrDefault(r => r.Name == regionPlan.Name);
@@ -672,62 +823,236 @@ public class PageGenerationService : IPageGenerationService
                 continue;
             }
 
+            var topLevelAllowed = region.DirectBlocks.Select(b => b.Name)
+                .Concat(region.AreaContainers.Select(c => c.BlockName))
+                .ToList();
+
             foreach (var block in regionPlan.Blocks ?? [])
             {
-                if (!region.AllowedBlocks.Contains(block.Id))
+                if (!topLevelAllowed.Contains(block.Id))
                 {
                     errors.Add(
                         $"Block '{block.Id}' is not allowed in region '{region.Name}'. " +
-                        $"Allowed: {string.Join(", ", region.AllowedBlocks)}");
+                        $"Allowed: {string.Join(", ", topLevelAllowed)}");
+                    continue;
                 }
+
+                ValidatePlannedBlock(block, allBlockDefsByName, errors, $"region '{region.Name}'");
             }
         }
 
         return new ValidationResult { IsValid = errors.Count == 0, Errors = errors };
     }
 
-    private ValidationResult ValidatePage(LlmPageResponse page, LlmPlanningSchema schema)
+    // Recursively validates a planned block's nestedBlocks and areas against its
+    // own definition, then recurses into each child the same way.
+    private void ValidatePlannedBlock(
+        LlmPlannedBlock block,
+        Dictionary<string, LlmPlanningBlockDef> blockDefsByName,
+        List<string> errors,
+        string contextLabel)
+    {
+        if (!blockDefsByName.TryGetValue(block.Id, out var def))
+        {
+            // Block exists somewhere as a name match was required to get here at the
+            // top level, but for nested calls this means the name isn't a recognised
+            // block definition at all anywhere in the schema.
+            errors.Add($"Unknown block '{block.Id}' referenced in {contextLabel}.");
+            return;
+        }
+
+        if (block.NestedBlocks is not null)
+        {
+            foreach (var (slotAlias, children) in block.NestedBlocks)
+            {
+                var slot = def.NestedSlots.FirstOrDefault(s => s.Alias == slotAlias);
+                if (slot is null)
+                {
+                    var validSlots = string.Join(", ", def.NestedSlots.Select(s => s.Alias));
+                    errors.Add($"Unknown nested slot '{slotAlias}' on block '{block.Id}' in {contextLabel}. Valid slots: {validSlots}");
+                    continue;
+                }
+
+                foreach (var child in children)
+                {
+                    if (slot.AllowedBlocks.Count > 0 && !slot.AllowedBlocks.Contains(child.Id))
+                    {
+                        errors.Add(
+                            $"Block '{child.Id}' is not allowed in nested slot '{slotAlias}' of '{block.Id}' in {contextLabel}. " +
+                            $"Allowed: {string.Join(", ", slot.AllowedBlocks)}");
+                        continue;
+                    }
+
+                    ValidatePlannedBlock(child, blockDefsByName, errors, $"nested slot '{slotAlias}' of '{block.Id}'");
+                }
+            }
+        }
+
+        if (block.Areas is not null && def.AreaContainerAreas is not null)
+        {
+            foreach (var (areaAlias, children) in block.Areas)
+            {
+                var area = def.AreaContainerAreas.FirstOrDefault(a => a.Alias == areaAlias);
+                if (area is null)
+                {
+                    var validAreas = string.Join(", ", def.AreaContainerAreas.Select(a => a.Alias));
+                    errors.Add($"Unknown area '{areaAlias}' in '{block.Id}' in {contextLabel}. Valid areas: {validAreas}");
+                    continue;
+                }
+
+                foreach (var child in children)
+                {
+                    if (area.AllowedBlocks.Count > 0 && !area.AllowedBlocks.Contains(child.Id))
+                    {
+                        errors.Add(
+                            $"Block '{child.Id}' is not allowed in area '{areaAlias}' of '{block.Id}' in {contextLabel}. " +
+                            $"Allowed: {string.Join(", ", area.AllowedBlocks)}");
+                        continue;
+                    }
+
+                    ValidatePlannedBlock(child, blockDefsByName, errors, $"area '{areaAlias}' of '{block.Id}'");
+                }
+            }
+        }
+    }
+
+    private Dictionary<string, LlmPlanningBlockDef> BuildBlockDefLookup(LlmPlanningSchema schema)
+    {
+        var lookup = new Dictionary<string, LlmPlanningBlockDef>();
+
+        void Add(LlmPlanningBlockDef def)
+        {
+            lookup[def.Name] = def; // last write wins on name collisions
+        }
+
+        foreach (var pageType in schema.PageTypes)
+        {
+            foreach (var region in pageType.Regions)
+            {
+                foreach (var direct in region.DirectBlocks)
+                {
+                    Add(direct);
+                    foreach (var slot in direct.NestedSlots)
+                        AddNestedSlotBlockDefs(slot, lookup);
+                }
+
+                foreach (var container in region.AreaContainers)
+                {
+                    Add(new LlmPlanningBlockDef
+                    {
+                        Name = container.BlockName,
+                        NestedSlots = [],
+                        AreaContainerAreas = container.Areas
+                    });
+
+                    foreach (var area in container.Areas)
+                    {
+                        foreach (var allowedName in area.AllowedBlocks)
+                        {
+                            // Find the actual def for this allowed block name among
+                            // direct blocks in the same region, if available, so its
+                            // own nested slots are preserved for recursive validation.
+                            var existingDef = region.DirectBlocks.FirstOrDefault(b => b.Name == allowedName);
+                            if (existingDef is not null)
+                            {
+                                Add(existingDef);
+                                foreach (var slot in existingDef.NestedSlots)
+                                    AddNestedSlotBlockDefs(slot, lookup);
+                            }
+                            else if (!lookup.ContainsKey(allowedName))
+                            {
+                                // No richer definition available (e.g. block has no
+                                // nested slots) — register a minimal entry so lookups
+                                // don't fail outright.
+                                Add(new LlmPlanningBlockDef { Name = allowedName });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return lookup;
+    }
+
+    private void AddNestedSlotBlockDefs(LlmNestedSlot slot, Dictionary<string, LlmPlanningBlockDef> lookup)
+    {
+        foreach (var allowedName in slot.AllowedBlocks)
+        {
+            if (!lookup.ContainsKey(allowedName))
+                lookup[allowedName] = new LlmPlanningBlockDef { Name = allowedName };
+        }
+    }
+
+    private ValidationResult ValidateContent(LlmPageResponse shell, LlmPageResponse filled)
     {
         var errors = new List<string>();
+        var warnings = new List<string>();
 
-        var pageType = schema.PageTypes.FirstOrDefault(x => x.Name == page.PageType);
-        if (pageType is null)
-            return new ValidationResult { IsValid = false, Errors = ["Invalid pageType"] };
+        if (filled.PageType != shell.PageType)
+            errors.Add($"pageType changed from '{shell.PageType}' to '{filled.PageType}'");
 
-        foreach (var block in page.Blocks)
+        foreach (var key in shell.Fields.Keys)
         {
-            var region = pageType.Regions.FirstOrDefault(r => r.Name == block.Region);
+            if (!filled.Fields.TryGetValue(key, out var value) || IsEmpty(value))
+                warnings.Add($"Field '{key}' was not filled in.");
+        }
 
-            if (region is null)
+        if (filled.Blocks.Count != shell.Blocks.Count)
+            errors.Add($"Expected {shell.Blocks.Count} top-level blocks, got {filled.Blocks.Count}.");
+
+        for (int i = 0; i < Math.Min(shell.Blocks.Count, filled.Blocks.Count); i++)
+            ValidateBlockContent(shell.Blocks[i], filled.Blocks[i], errors, warnings);
+
+        if (warnings.Count > 0)
+            Log("CONTENT VALIDATION WARNINGS", string.Join("\n", warnings));
+
+        return new ValidationResult { IsValid = errors.Count == 0, Errors = errors };
+    }
+
+    private void ValidateBlockContent(LlmBlock shellBlock, LlmBlock filledBlock, List<string> errors, List<string> warnings)
+    {
+        if (filledBlock.Id != shellBlock.Id)
+            errors.Add($"Block id mismatch: expected '{shellBlock.Id}', got '{filledBlock.Id}'");
+
+        foreach (var key in shellBlock.Fields.Keys)
+        {
+            if (!filledBlock.Fields.TryGetValue(key, out var value) || IsEmpty(value))
+                warnings.Add($"Field '{key}' on block '{shellBlock.Name}' ({shellBlock.Id}) was not filled in.");
+        }
+
+        foreach (var (areaAlias, shellChildren) in shellBlock.Areas)
+        {
+            if (!filledBlock.Areas.TryGetValue(areaAlias, out var filledChildren))
             {
-                errors.Add($"Invalid region on block {block.Id}: {block.Region}");
+                errors.Add($"Area '{areaAlias}' on block '{shellBlock.Name}' missing in content response.");
                 continue;
             }
 
-            if (!region.AllowedBlocks.Contains(block.Id))
+            if (filledChildren.Count != shellChildren.Count)
             {
-                errors.Add($"Block {block.Id} not allowed in region {block.Region}");
+                errors.Add($"Area '{areaAlias}' on block '{shellBlock.Name}' expected {shellChildren.Count} children, got {filledChildren.Count}.");
+                continue;
             }
 
-            ValidateNested(block, errors);
+            for (int i = 0; i < shellChildren.Count; i++)
+                ValidateBlockContent(shellChildren[i], filledChildren[i], errors, warnings);
         }
 
-        return new ValidationResult
+        foreach (var (nestedAlias, shellChildren) in shellBlock.NestedBlocks)
         {
-            IsValid = errors.Count == 0,
-            Errors = errors
-        };
+            if (!filledBlock.NestedBlocks.TryGetValue(nestedAlias, out var filledChildren))
+                continue; // nested blocks are allowed to remain empty unless you want them filled too
+
+            for (int i = 0; i < Math.Min(shellChildren.Count, filledChildren.Count); i++)
+                ValidateBlockContent(shellChildren[i], filledChildren[i], errors, warnings);
+        }
     }
 
-    private void ValidateNested(LlmBlock block, List<string> errors)
+    private static bool IsEmpty(object? value)
     {
-        foreach (var kv in block.NestedBlocks)
-        {
-            foreach (var child in kv.Value)
-            {
-                if (string.IsNullOrWhiteSpace(child.Id))
-                    errors.Add($"Nested block missing Id in {block.Id}");
-            }
-        }
+        if (value is null) return true;
+        if (value is JsonElement je) return je.ValueKind == JsonValueKind.String && je.GetString() == "";
+        return value is string s && s == "";
     }
 }
