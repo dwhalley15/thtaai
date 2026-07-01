@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using thta_ai.Models;
 using System.Runtime.CompilerServices;
+using System.Text.Json.Nodes;
 
 public class PageGenerationService : IPageGenerationService
 {
@@ -36,7 +37,8 @@ public class PageGenerationService : IPageGenerationService
         Log("PAGE SHELL", JsonSerializer.Serialize(pageShell, new JsonSerializerOptions { WriteIndented = true }));
 
         // STEP 3: FILL CONTENT (retries until all fields are filled correctly)
-        var finalPage = await GenerateContentWithRetryAsync(prompt, conversationId, pageShell, cancellationToken);
+        var contentConversationId = Guid.NewGuid();
+        var finalPage = await GenerateContentWithRetryAsync(prompt, contentConversationId, pageShell, cancellationToken);
 
         return new GeneratePageResponse
         {
@@ -54,7 +56,7 @@ public class PageGenerationService : IPageGenerationService
     CancellationToken ct)
     {
         var systemPrompt = BuildPlanningPrompt(schema);
-        Log("PLAN SYSTEM PROMPT", systemPrompt);
+        Log("PLAN SYSTEM PROMPT", $"[~{systemPrompt.Length} chars]\n{systemPrompt}");
 
         var messages = new List<ChatMessage>
     {
@@ -64,7 +66,7 @@ public class PageGenerationService : IPageGenerationService
 
         Log("PLAN USER PROMPT", prompt);
 
-        var content = await SendChatAsync(conversationId, messages, ct);
+        var content = await SendChatAsync(conversationId, messages, ct, _options.PlanningContextSize);
         Log("PLAN LLM RESPONSE", content);
 
         if (string.IsNullOrWhiteSpace(content))
@@ -91,10 +93,11 @@ public class PageGenerationService : IPageGenerationService
         new() { Role = "user", Content = prompt }
     };
 
-        var content = await SendChatAsync(conversationId, messages, ct);
+        var content = await SendChatAsync(conversationId, messages, ct, _options.ContentContextSize);
         Log("CONTENT LLM RESPONSE", content);
 
         var json = ExtractJson(content);
+        json = NormaliseContentJson(json);
         Log("CONTENT EXTRACTED JSON", json.GetRawText());
 
         return JsonSerializer.Deserialize<LlmPageResponse>(json.GetRawText(), LlmJsonOptions)!;
@@ -161,14 +164,21 @@ public class PageGenerationService : IPageGenerationService
     private async Task<string> SendChatAsync(
         Guid conversationId,
         List<ChatMessage> messages,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? contextSize = null)
     {
         var request = new ChatCompletionRequest
         {
             ConversationId = conversationId,
             Model = _options.Model,
             Stream = false,
-            Messages = messages
+            Messages = messages,
+            Options = new ChatOptions
+            {
+                ContextSize = contextSize,
+                Temperature = _options.Temperature,
+                TopP = _options.TopP
+            }
         };
 
         var json = JsonSerializer.Serialize(request);
@@ -243,9 +253,13 @@ public class PageGenerationService : IPageGenerationService
 
                 // Names of all non-container blocks in this region — used to populate
                 // area "allowed" lists when the raw schema's allowedBlocks is empty (= "any").
-                var nonContainerNames = nonContainerBlocks
-                    .Select(b => b.GetProperty("name").GetString() ?? "")
+                var nonContainerDefs = nonContainerBlocks
+                    .Select(b => BuildPlanningBlockDef(b.GetProperty("name").GetString() ?? "", b))
                     .ToList();
+
+                region.AvailableBlockDefs.AddRange(nonContainerDefs);
+
+                var nonContainerNames = nonContainerDefs.Select(d => d.Name).ToList();
 
                 foreach (var block in containerBlocks)
                 {
@@ -286,11 +300,7 @@ public class PageGenerationService : IPageGenerationService
                 // belong exclusively inside the containers' areas.
                 if (containerBlocks.Count == 0)
                 {
-                    foreach (var block in nonContainerBlocks)
-                    {
-                        var blockName = block.GetProperty("name").GetString() ?? "";
-                        region.DirectBlocks.Add(BuildPlanningBlockDef(blockName, block));
-                    }
+                    region.DirectBlocks.AddRange(nonContainerDefs);
                 }
 
                 pageType.Regions.Add(region);
@@ -359,6 +369,7 @@ public class PageGenerationService : IPageGenerationService
             if (type is "Umbraco.BlockGrid" or "Umbraco.BlockList") continue;
             var alias = prop.GetProperty("alias").GetString() ?? "";
             page2.Fields[alias] = "";
+            page2.FieldTypes[alias] = GetFieldMeta(prop);
         }
 
         foreach (var region in plan.Regions)
@@ -423,6 +434,7 @@ public class PageGenerationService : IPageGenerationService
                 else
                 {
                     block.Fields[alias] = "";
+                    block.FieldTypes[alias] = GetFieldMeta(prop);
                 }
             }
         }
@@ -458,6 +470,36 @@ public class PageGenerationService : IPageGenerationService
 
         return block;
     }
+
+    private static LlmFieldMeta GetFieldMeta(JsonElement prop)
+    {
+        var type = prop.GetProperty("type").GetString() ?? "";
+
+        var meta = new LlmFieldMeta { Type = FriendlyFieldType(type) };
+
+        if (type == "Umbraco.DropDown.Flexible" && prop.TryGetProperty("options", out var opts))
+        {
+            meta.Options = opts.EnumerateArray()
+                .Select(o => o.GetString() ?? "")
+                .Where(s => s != "")
+                .ToList();
+        }
+
+        return meta;
+    }
+
+    private static string FriendlyFieldType(string umbracoType) => umbracoType switch
+    {
+        "Umbraco.TextBox" => "short text",
+        "Umbraco.TextArea" => "long text",
+        "Umbraco.RichText" => "rich text (HTML)",
+        "Umbraco.TrueFalse" => "boolean — must be exactly \"true\" or \"false\"",
+        "Umbraco.DropDown.Flexible" => "choice — must be exactly one of the listed options",
+        "Umbraco.Integer" => "integer",
+        "Umbraco.MediaPicker3" => "media reference — leave as empty string, cannot be generated",
+        "Umbraco.MultiUrlPicker" => "link — leave as empty string, cannot be generated",
+        _ => umbracoType
+    };
 
     // ─── Prompt Building ──────────────────────────────────────────────────────
 
@@ -518,15 +560,34 @@ public class PageGenerationService : IPageGenerationService
                     }
                 }
 
+                // AFTER
                 foreach (var c in r.AreaContainers)
                 {
                     sb.AppendLine($"    Area container: {c.BlockName}");
                     foreach (var area in c.Areas)
                     {
-                        var allowed = area.AllowedBlocks.Count > 0
-                            ? string.Join(", ", area.AllowedBlocks)
-                            : "any block";
-                        sb.AppendLine($"      area alias \"{area.Alias}\": {allowed}");
+                        if (area.AllowedBlocks.Count == 0)
+                        {
+                            sb.AppendLine($"      area alias \"{area.Alias}\" (max 1 block):");
+                            continue;
+                        }
+
+                        sb.AppendLine($"      area alias \"{area.Alias}\" (max 1 block):");
+                        foreach (var allowedName in area.AllowedBlocks)
+                        {
+                            var def = r.AvailableBlockDefs.FirstOrDefault(b => b.Name == allowedName);
+                            sb.AppendLine($"        * {allowedName}");
+                            if (def is { NestedSlots.Count: > 0 })
+                            {
+                                foreach (var slot in def.NestedSlots)
+                                {
+                                    var slotAllowed = slot.AllowedBlocks.Count > 0
+                                        ? string.Join(", ", slot.AllowedBlocks)
+                                        : "any block";
+                                    sb.AppendLine($"            nested slot \"{slot.Alias}\": {slotAllowed}");
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -589,12 +650,23 @@ public class PageGenerationService : IPageGenerationService
                 foreach (var container in region.AreaContainers)
                 {
                     sb.AppendLine($"    Area container: {container.BlockName}");
-                    foreach (var area in container.Areas)
+
+                    var allSameAllowed = container.Areas.Count > 1 &&
+                        container.Areas.All(a => a.AllowedBlocks.SequenceEqual(container.Areas[0].AllowedBlocks));
+
+                    if (allSameAllowed)
                     {
-                        var allowed = area.AllowedBlocks.Count > 0
-                            ? string.Join(", ", area.AllowedBlocks)
-                            : "any block";
-                        sb.AppendLine($"      - area alias \"{area.Alias}\" (span {area.ColumnSpan}) — allowed: {allowed}");
+                        var aliases = string.Join(", ", container.Areas.Select(a => $"\"{a.Alias}\""));
+                        sb.AppendLine($"      - areas {aliases} (each max 1 block) — allowed blocks:");
+                        AppendBlockList(sb, container.Areas[0].AllowedBlocks, region, "          ");
+                    }
+                    else
+                    {
+                        foreach (var area in container.Areas)
+                        {
+                            sb.AppendLine($"      - area alias \"{area.Alias}\" (span {area.ColumnSpan}, max 1 block) — allowed blocks:");
+                            AppendBlockList(sb, area.AllowedBlocks, region, "          ");
+                        }
                     }
                 }
             }
@@ -654,27 +726,92 @@ public class PageGenerationService : IPageGenerationService
             """;
     }
 
+    private void AppendBlockList(StringBuilder sb, List<string> allowedNames, LlmRegion region, string indent)
+    {
+        foreach (var allowedName in allowedNames)
+        {
+            var def = region.AvailableBlockDefs.FirstOrDefault(b => b.Name == allowedName);
+            sb.AppendLine($"{indent}* {allowedName}");
+            if (def is { NestedSlots.Count: > 0 })
+            {
+                foreach (var slot in def.NestedSlots)
+                {
+                    var slotAllowed = slot.AllowedBlocks.Count > 0
+                        ? string.Join(", ", slot.AllowedBlocks)
+                        : "any block";
+                    sb.AppendLine($"{indent}    nested slot \"{slot.Alias}\": {slotAllowed}");
+                }
+            }
+        }
+    }
+
     private string BuildContentPrompt(LlmPageResponse page)
     {
+        var fieldGuide = BuildFieldGuide(page);
+
         var json = JsonSerializer.Serialize(page, new JsonSerializerOptions
         {
-            WriteIndented = true,  // ← was false
+            WriteIndented = true,
             Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
         });
 
         return $"""
-                You are a CMS content writer. Fill every empty string ("") in this JSON with realistic content.
+            You are a CMS content writer. Fill every empty string ("") in this JSON with realistic content.
 
-                RULES:
-                - Return the COMPLETE JSON structure unchanged — same keys, same nesting, same arrays
-                - Replace ONLY empty string values ("")
-                - Do NOT add, remove, or rename any keys
-                - Do NOT wrap in markdown
-                - Return valid JSON only
+            FIELD TYPES AND CONSTRAINTS:
+            {fieldGuide}
 
-                INPUT:
-                {json}
-                """;
+            RULES:
+            - Return the COMPLETE JSON structure unchanged — same keys, same nesting, same arrays
+            - Replace ONLY empty string values ("")
+            - For boolean fields, use exactly "true" or "false"
+            - For choice fields, use exactly one of the listed options, verbatim, nothing else
+            - For fields marked "leave as empty string, cannot be generated", do NOT fill them in — leave them as ""
+            - Do NOT add, remove, or rename any keys
+            - Do NOT wrap in markdown
+            - Return valid JSON only
+
+            INPUT:
+            {json}
+            """;
+    }
+
+    private string BuildFieldGuide(LlmPageResponse page)
+    {
+        var sb = new StringBuilder();
+
+        sb.AppendLine("Page fields:");
+        foreach (var (alias, meta) in page.FieldTypes)
+            sb.AppendLine(FormatFieldLine(alias, meta));
+
+        foreach (var block in page.Blocks)
+            AppendBlockFieldGuide(sb, block, "");
+
+        return sb.ToString().TrimEnd();
+    }
+
+    private void AppendBlockFieldGuide(StringBuilder sb, LlmBlock block, string path)
+    {
+        var label = string.IsNullOrEmpty(path) ? block.Name : $"{block.Name} ({path})";
+        sb.AppendLine($"Block '{label}':");
+        foreach (var (alias, meta) in block.FieldTypes)
+            sb.AppendLine(FormatFieldLine(alias, meta));
+
+        foreach (var (areaAlias, children) in block.Areas)
+            foreach (var child in children)
+                AppendBlockFieldGuide(sb, child, areaAlias);
+
+        foreach (var (slotAlias, children) in block.NestedBlocks)
+            foreach (var child in children)
+                AppendBlockFieldGuide(sb, child, slotAlias);
+    }
+
+    private static string FormatFieldLine(string alias, LlmFieldMeta meta)
+    {
+        var line = $"  - {alias}: {meta.Type}";
+        if (meta.Options is { Count: > 0 })
+            line += $" — options: {string.Join(", ", meta.Options)}";
+        return line;
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────
@@ -900,6 +1037,14 @@ public class PageGenerationService : IPageGenerationService
                     continue;
                 }
 
+                // NEW — check capacity before validating individual children
+                if (children.Count > area.MaxItems)
+                {
+                    errors.Add(
+                        $"Area '{areaAlias}' of '{block.Id}' in {contextLabel} allows at most {area.MaxItems} block, got {children.Count}.");
+                    continue;
+                }
+
                 foreach (var child in children)
                 {
                     if (area.AllowedBlocks.Count > 0 && !area.AllowedBlocks.Contains(child.Id))
@@ -945,27 +1090,21 @@ public class PageGenerationService : IPageGenerationService
                         AreaContainerAreas = container.Areas
                     });
 
+                    // AFTER — AvailableBlockDefs is now a superset of DirectBlocks (DirectBlocks
+                    // gets populated from it when the region has no containers), so this single
+                    // lookup replaces the two-tier DirectBlocks/stub logic.
                     foreach (var area in container.Areas)
                     {
                         foreach (var allowedName in area.AllowedBlocks)
                         {
-                            // Find the actual def for this allowed block name among
-                            // direct blocks in the same region, if available, so its
-                            // own nested slots are preserved for recursive validation.
-                            var existingDef = region.DirectBlocks.FirstOrDefault(b => b.Name == allowedName);
-                            if (existingDef is not null)
-                            {
-                                Add(existingDef);
-                                foreach (var slot in existingDef.NestedSlots)
-                                    AddNestedSlotBlockDefs(slot, lookup);
-                            }
-                            else if (!lookup.ContainsKey(allowedName))
-                            {
-                                // No richer definition available (e.g. block has no
-                                // nested slots) — register a minimal entry so lookups
-                                // don't fail outright.
-                                Add(new LlmPlanningBlockDef { Name = allowedName });
-                            }
+                            if (lookup.ContainsKey(allowedName)) continue;
+
+                            var def = region.AvailableBlockDefs.FirstOrDefault(b => b.Name == allowedName)
+                                      ?? new LlmPlanningBlockDef { Name = allowedName };
+
+                            Add(def);
+                            foreach (var slot in def.NestedSlots)
+                                AddNestedSlotBlockDefs(slot, lookup);
                         }
                     }
                 }
@@ -1047,6 +1186,41 @@ public class PageGenerationService : IPageGenerationService
             for (int i = 0; i < Math.Min(shellChildren.Count, filledChildren.Count); i++)
                 ValidateBlockContent(shellChildren[i], filledChildren[i], errors, warnings);
         }
+    }
+
+
+
+    private static JsonElement NormaliseContentJson(JsonElement root)
+    {
+        // Already correct shape (case-insensitive check)
+        if (root.TryGetProperty("blocks", out _) || root.TryGetProperty("Blocks", out _))
+            return root;
+
+        // Model reverted to the planning-phase "regions" wrapper — flatten it.
+        var hasRegions = root.TryGetProperty("regions", out var regions)
+                       || root.TryGetProperty("Regions", out regions);
+        if (!hasRegions)
+            return root; // nothing we can repair; let validation report the real error
+
+        var node = JsonNode.Parse(root.GetRawText())!.AsObject();
+        var regionsKey = node.ContainsKey("regions") ? "regions" : "Regions";
+
+        var flatBlocks = new JsonArray();
+        foreach (var region in node[regionsKey]!.AsArray())
+        {
+            var regionObj = region!.AsObject();
+            var blocksKey = regionObj.ContainsKey("blocks") ? "blocks"
+                           : regionObj.ContainsKey("Blocks") ? "Blocks" : null;
+            if (blocksKey is null) continue;
+
+            foreach (var block in regionObj[blocksKey]!.AsArray())
+                flatBlocks.Add(block!.DeepClone());
+        }
+
+        node.Remove(regionsKey);
+        node["blocks"] = flatBlocks;
+
+        return JsonDocument.Parse(node.ToJsonString()).RootElement.Clone();
     }
 
     private static bool IsEmpty(object? value)

@@ -7,4 +7,8 @@ public class AiGenerationOptions
     public string PixabayKey { get; set; } = "";
     public int MaxPlanRetries { get; set; } = 2;
     public int MaxContentRetries { get; set; } = 1;
+    public int PlanningContextSize { get; set; } = 8192;
+    public int ContentContextSize { get; set; } = 8192;
+    public double Temperature { get; set; } = 0.3;
+    public double TopP { get; set; } = 0.85;
 }
