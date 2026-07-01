@@ -1,6 +1,7 @@
 namespace thta_ai.Models;
 
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 // ─── LLM Planning (Pass 1) ────────────────────────────────────────────────────
 // The planning schema is sent to the LLM so it can choose a page structure
@@ -22,6 +23,8 @@ public class LlmRegion
     public string Name { get; set; } = "";
     public List<LlmPlanningBlockDef> DirectBlocks { get; set; } = [];
     public List<LlmAreaContainer> AreaContainers { get; set; } = [];
+
+    public List<LlmPlanningBlockDef> AvailableBlockDefs { get; set; } = new();
 }
 
 public record LlmPlanningBlockDef
@@ -49,6 +52,8 @@ public record LlmPlanningArea
     public string Alias { get; init; } = "";
     public int ColumnSpan { get; init; }
     public List<string> AllowedBlocks { get; init; } = [];
+
+    public int MaxItems { get; init; } = 1;  
 }
 
 public record LlmPlanningBlock
@@ -69,6 +74,7 @@ public class LlmRegionPlan
 {
     public string Name { get; set; }
     public List<LlmPlannedBlock> Blocks { get; set; }
+    
 }
 
 public record LlmPlannedBlock
@@ -88,6 +94,15 @@ public record LlmPageResponse
     public string PageType { get; init; } = "";
     public Dictionary<string, object?> Fields { get; init; } = [];
     public List<LlmBlock> Blocks { get; init; } = [];
+
+    [JsonIgnore] // guidance only — never sent to/expected back from the LLM
+    public Dictionary<string, LlmFieldMeta> FieldTypes { get; set; } = new();
+}
+
+public class LlmFieldMeta
+{
+    public string Type { get; set; } = "";
+    public List<string>? Options { get; set; } // populated for dropdowns only
 }
 
 public record LlmBlock
@@ -100,6 +115,9 @@ public record LlmBlock
     public Dictionary<string, List<LlmBlock>> Areas { get; init; } = [];
 
     public string Region { get; set; } = "";
+
+    [JsonIgnore]
+    public Dictionary<string, LlmFieldMeta> FieldTypes { get; set; } = new();
 }
 
 // ─── API Request / Response Models ───────────────────────────────────────────
