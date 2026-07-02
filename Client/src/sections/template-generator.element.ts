@@ -12,6 +12,41 @@ interface Context {
     allDataTypes: Map<string, any>;  // All fetched data types, keyed by ID
 }
 
+/**
+ * Maps raw Umbraco editor aliases to a friendly label + icon for non-technical
+ * display. Unknown aliases fall back to a stripped/prettified version of the
+ * alias itself, so nothing ever renders blank.
+ */
+const FRIENDLY_LABELS: Record<string, { label: string; icon: string }> = {
+    "Umbraco.RichText": { label: "Rich Text", icon: "icon-browser-window" },
+    "Umbraco.TextBox": { label: "Text", icon: "icon-text-align-left" },
+    "Umbraco.TextArea": { label: "Long Text", icon: "icon-text-align-left" },
+    "Umbraco.MediaPicker3": { label: "Image / Media", icon: "icon-picture" },
+    "Umbraco.MultiUrlPicker": { label: "Link(s)", icon: "icon-link" },
+    "Umbraco.TrueFalse": { label: "Yes / No Toggle", icon: "icon-checkbox-dotted" },
+    "Umbraco.DropDown.Flexible": { label: "Dropdown", icon: "icon-list" },
+    "Umbraco.RadioButtonList": { label: "Choice (pick one)", icon: "icon-radio-button" },
+    "Umbraco.CheckBoxList": { label: "Choice (pick many)", icon: "icon-checkbox-dotted" },
+    "Umbraco.DatePicker": { label: "Date", icon: "icon-calendar" },
+    "Umbraco.ContentPicker": { label: "Page Link", icon: "icon-document" },
+    "Umbraco.MultiNodeTreePicker": { label: "Page / Content Links", icon: "icon-documents" },
+    "Umbraco.MemberPicker": { label: "Member Link", icon: "icon-user" },
+    "Umbraco.Tags": { label: "Tags", icon: "icon-tags" },
+    "Umbraco.Slider": { label: "Number Slider", icon: "icon-navigation-vertical" },
+    "Umbraco.BlockGrid": { label: "Content Blocks (Grid)", icon: "icon-thumbnail-list" },
+    "Umbraco.BlockList": { label: "Content Blocks (List)", icon: "icon-list" },
+};
+
+function getFriendlyType(editorAlias: string): { label: string; icon: string } {
+    if (!editorAlias) return { label: "Field", icon: "icon-science" };
+    return (
+        FRIENDLY_LABELS[editorAlias] ?? {
+            label: editorAlias.replace(/^Umbraco\./, "").replace(/\./g, " "),
+            icon: "icon-science",
+        }
+    );
+}
+
 @customElement("template-generator-view")
 export class TemplateGeneratorView extends UmbLitElement {
 
@@ -331,53 +366,171 @@ export class TemplateGeneratorView extends UmbLitElement {
     // ─── Rendering ────────────────────────────────────────────────────────────
 
     /**
-     * Recursively renders a property list. For BlockGrid/BlockList properties,
-     * renders each allowed block and calls itself on the block's own properties,
-     * handling arbitrary nesting depth.
+     * Renders a single field row. Fields with nested blocks (BlockGrid/BlockList)
+     * become a collapsible <details> node so the tree can go arbitrarily deep
+     * without turning into a wall of text; plain fields render as a flat row.
      */
-    private _renderProperties(properties: any[]): any {
-        if (!properties?.length) {
-            return html`<em style="color: var(--uui-color-text-alt);">No properties</em>`;
+    private _renderPropertyNode(p: any): any {
+        const friendly = getFriendlyType(p.type);
+        const hasBlocks = p.blocks?.length > 0;
+
+        if (!hasBlocks) {
+            return html`
+                <div class="field-row">
+                    <uui-icon name="${friendly.icon}" class="field-icon"></uui-icon>
+                    <span class="field-name">${p.alias}</span>
+                    <uui-tag look="outline" class="field-type" title="${p.type}">${friendly.label}</uui-tag>
+                    ${p.options?.length ? html`
+                        <div class="field-options">
+                            ${p.options.map((o: string) => html`
+                                <uui-tag look="default" class="option-tag">${o}</uui-tag>
+                            `)}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
         }
 
-        return properties.map((p: any) => html`
-        <div style="margin-bottom: 8px;">
-            <div>
-                <strong>${p.alias}</strong>
-                <uui-tag look="outline" style="margin-left: 6px; font-size: 0.75em;">
-                    ${p.type}
-                </uui-tag>
-            </div>
-
-            ${p.options?.length ? html`
-                <div style="margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--uui-color-border);">
-                    ${p.options.map((o: string) => html`
-                        <uui-tag look="default" style="margin: 2px; font-size: 0.75em;">${o}</uui-tag>
-                    `)}
+        return html`
+            <details class="field-tree">
+                <summary>
+                    <uui-icon name="${friendly.icon}" class="field-icon"></uui-icon>
+                    <span class="field-name">${p.alias}</span>
+                    <uui-tag look="outline" class="field-type" title="${p.type}">${friendly.label}</uui-tag>
+                    <span class="muted count-badge">
+                        ${p.blocks.length} block type${p.blocks.length === 1 ? '' : 's'}
+                    </span>
+                </summary>
+                <div class="field-children">
+                    ${p.blocks.map((b: any) => this._renderBlockNode(b))}
                 </div>
-            ` : ''}
+            </details>
+        `;
+    }
 
-            ${p.blocks?.length ? html`
-                <div style="margin-top: 4px; padding-left: 12px; border-left: 2px solid var(--uui-color-border);">
-                    ${p.blocks.map((b: any) => html`
-                        <div style="margin-bottom: 6px;">
-                            <uui-tag look="positive">${b.name}</uui-tag>
-                            <div style="padding-left: 10px; margin-top: 2px;">
-                                ${this._renderProperties(b.properties)}
+    /**
+     * Renders a single allowed block element as a collapsible node containing
+     * its own fields, and any BlockGrid areas defined on it.
+     */
+    private _renderBlockNode(b: any): any {
+        const fieldCount = b.properties?.length ?? 0;
+        return html`
+            <details class="block-node">
+                <summary>
+                    <uui-icon name="icon-box" class="field-icon"></uui-icon>
+                    <strong>${b.name}</strong>
+                    <span class="muted count-badge">
+                        ${fieldCount} field${fieldCount === 1 ? '' : 's'}
+                    </span>
+                </summary>
+                <div class="block-children">
+                    ${fieldCount
+                ? b.properties.map((p: any) => this._renderPropertyNode(p))
+                : html`<em class="muted">No fields on this block</em>`}
+                    ${b.areas?.length ? b.areas.map((a: any) => this._renderAreaNode(a)) : ''}
+                </div>
+            </details>
+        `;
+    }
+
+    /**
+     * Renders a single BlockGrid area as a collapsible node listing which
+     * block types are allowed to be dropped into it.
+     */
+    private _renderAreaNode(a: any): any {
+        const count = a.allowedBlocks?.length ?? 0;
+        return html`
+            <details class="area-node">
+                <summary>
+                    <uui-icon name="icon-navigation-vertical" class="field-icon"></uui-icon>
+                    <span>Area: <strong>${a.alias}</strong></span>
+                    <span class="muted count-badge">
+                        allows ${count} block type${count === 1 ? '' : 's'}
+                    </span>
+                </summary>
+                <div class="area-children">
+                    ${count
+                ? a.allowedBlocks.map((ab: any) => html`<uui-tag look="secondary" class="option-tag">${ab.name}</uui-tag>`)
+                : html`<em class="muted">No block types specified</em>`}
+                </div>
+            </details>
+        `;
+    }
+
+    /**
+     * Renders one page type as a collapsible card: a summary line with
+     * at-a-glance counts, expanding to compositions, allowed children,
+     * and the full field tree.
+     */
+    private _renderPageCard(s: any): any {
+        const propCount = s.properties?.length ?? 0;
+
+        return html`
+            <details class="page-card">
+                <summary class="page-card-summary">
+                    <uui-icon name="icon-document" class="page-icon"></uui-icon>
+                    <div class="page-title">
+                        <strong>${s.docType.name}</strong>
+                        <span class="muted">${s.docType.alias}</span>
+                    </div>
+                    <div class="page-summary-chips">
+                        <uui-tag look="primary" class="summary-chip">
+                            ${propCount} field${propCount === 1 ? '' : 's'}
+                        </uui-tag>
+                        ${s.compositions.length ? html`
+                            <uui-tag look="secondary" class="summary-chip">
+                                ${s.compositions.length} composition${s.compositions.length === 1 ? '' : 's'}
+                            </uui-tag>
+                        ` : ''}
+                        ${s.allowedChildren?.length ? html`
+                            <uui-tag look="secondary" class="summary-chip">
+                                ${s.allowedChildren.length} allowed child page${s.allowedChildren.length === 1 ? '' : 's'}
+                            </uui-tag>
+                        ` : ''}
+                    </div>
+                </summary>
+ 
+                <div class="page-card-body">
+                    ${s.compositions.length ? html`
+                        <div class="page-section">
+                            <div class="section-label">Built from</div>
+                            <div class="chip-row">
+                                ${s.compositions.map((c: any) => html`
+                                    <uui-tag look="secondary" class="option-tag">${c.name}</uui-tag>
+                                `)}
                             </div>
                         </div>
-                    `)}
+                    ` : ''}
+ 
+                    ${s.allowedChildren?.length ? html`
+                        <div class="page-section">
+                            <div class="section-label">Can contain these page types</div>
+                            <div class="chip-row">
+                                ${s.allowedChildren.map((c: any) => html`
+                                    <uui-tag look="secondary" class="option-tag">${c.name}</uui-tag>
+                                `)}
+                            </div>
+                        </div>
+                    ` : ''}
+ 
+                    <div class="page-section">
+                        <div class="section-label">Fields</div>
+                        <div class="field-list">
+                            ${propCount
+                ? s.properties.map((p: any) => this._renderPropertyNode(p))
+                : html`<em class="muted">No fields</em>`}
+                        </div>
+                    </div>
                 </div>
-            ` : ''}
-        </div>
-    `);
+            </details>
+        `;
     }
 
     override render() {
         return html`
             <uui-box headline="Page Schema Generator">
-
-                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+ 
+                <div class="toolbar">
                     ${this._loading
                 ? html`<uui-loader></uui-loader>`
                 : html`
@@ -385,73 +538,30 @@ export class TemplateGeneratorView extends UmbLitElement {
                                 ${this._schema.length > 0 ? 'Regenerate' : 'Generate'}
                             </uui-button>
                         `}
-
+ 
                     ${this._schema.length > 0 && !this._loading ? html`
                         <uui-button @click=${this._clearCache} look="secondary" label="Clear Cache">
                             Clear Cache
                         </uui-button>
                     ` : ''}
-
+ 
                     ${this._lastGenerated ? html`
-                        <span style="font-size: 0.85em; color: var(--uui-color-text-alt);">
+                        <span class="muted">
                             Last generated: ${this._lastGenerated.toLocaleString()}
                         </span>
                     ` : ''}
                 </div>
-
+ 
                 ${this._schema.length > 0 ? html`
-                    <uui-table>
-                        <uui-table-head>
-                            <uui-table-head-cell>Document Type</uui-table-head-cell>
-                            <uui-table-head-cell>Compositions</uui-table-head-cell>
-                            <uui-table-head-cell>Allowed Children</uui-table-head-cell>
-                            <uui-table-head-cell>Properties</uui-table-head-cell>
-                        </uui-table-head>
-
-                        ${this._schema.map(s => html`
-                        <uui-table-row>
-
-                            <uui-table-cell>
-                                <strong>${s.docType.name}</strong>
-                                <div style="font-size: 0.8em; color: var(--uui-color-text-alt);">
-                                    ${s.docType.alias}
-                                </div>
-                            </uui-table-cell>
-
-                            <uui-table-cell>
-                                ${s.compositions.length === 0
-                        ? html`<em style="color: var(--uui-color-text-alt);">None</em>`
-                        : s.compositions.map((c: any) => html`
-                                        <uui-tag look="secondary" style="margin: 2px;">${c.name}</uui-tag>
-                                    `)
-                    }
-                            </uui-table-cell>
-
-                            <uui-table-cell>
-                                ${s.allowedChildren?.length === 0
-                        ? html`<em style="color: var(--uui-color-text-alt);">None</em>`
-                        : s.allowedChildren?.map((c: any) => html`
-                                        <uui-tag look="secondary" style="margin: 2px; font-size: 0.75em;">
-                                            ${c.name}
-                                        </uui-tag>
-                                    `)
-                    }
-                            </uui-table-cell>
-
-                            <uui-table-cell>
-                                ${this._renderProperties(s.properties)}
-                            </uui-table-cell>
-
-                        </uui-table-row>
-                    `)}
-
-                    </uui-table>
+                    <div class="page-list">
+                        ${this._schema.map(s => this._renderPageCard(s))}
+                    </div>
                 ` : ''}
-
+ 
                 ${this._errorMessage ? html`
                     <uui-tag look="danger">${this._errorMessage}</uui-tag>
                 ` : ''}
-
+ 
             </uui-box>
         `;
     }
@@ -461,6 +571,218 @@ export class TemplateGeneratorView extends UmbLitElement {
             :host {
                 display: block;
                 padding: 20px;
+            }
+ 
+            .toolbar {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                margin-bottom: 20px;
+            }
+ 
+            .muted {
+                color: var(--uui-color-text-alt);
+                font-size: 0.85em;
+            }
+ 
+            /* ── Page cards ─────────────────────────────────────────────── */
+ 
+            .page-list {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+ 
+            .page-card {
+                border: 1px solid var(--uui-color-border);
+                border-radius: var(--uui-border-radius, 6px);
+                background: var(--uui-color-surface);
+            }
+ 
+            .page-card-summary {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 14px 16px;
+                cursor: pointer;
+                list-style: none;
+            }
+ 
+            .page-card-summary::-webkit-details-marker {
+                display: none;
+            }
+ 
+            .page-card-summary::before {
+                content: "▸";
+                display: inline-block;
+                transition: transform 0.15s ease;
+                color: var(--uui-color-text-alt);
+                flex: 0 0 auto;
+            }
+ 
+            .page-card[open] > .page-card-summary::before {
+                transform: rotate(90deg);
+            }
+ 
+            .page-icon {
+                flex: 0 0 auto;
+                font-size: 1.3em;
+                color: var(--uui-color-interactive);
+            }
+ 
+            .page-title {
+                display: flex;
+                flex-direction: column;
+                gap: 1px;
+                margin-right: auto;
+            }
+ 
+            .page-title .muted {
+                font-size: 0.75em;
+            }
+ 
+            .page-summary-chips {
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+            }
+ 
+            .summary-chip {
+                font-size: 0.72em;
+            }
+ 
+            .page-card-body {
+                padding: 4px 16px 16px 44px;
+                border-top: 1px solid var(--uui-color-divider);
+            }
+ 
+            .page-section {
+                margin-top: 14px;
+            }
+ 
+            .section-label {
+                font-size: 0.75em;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: var(--uui-color-text-alt);
+                margin-bottom: 6px;
+            }
+ 
+            .chip-row {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+ 
+            /* ── Field tree ──────────────────────────────────────────────── */
+ 
+            .field-list {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+ 
+            .field-row {
+                display: flex;
+                align-items: center;
+                flex-wrap: wrap;
+                gap: 8px;
+                padding: 6px 8px;
+                border-radius: 4px;
+            }
+ 
+            .field-row:hover,
+            .field-tree > summary:hover,
+            .block-node > summary:hover,
+            .area-node > summary:hover {
+                background: var(--uui-color-surface-alt, rgba(0, 0, 0, 0.03));
+            }
+ 
+            .field-icon {
+                color: var(--uui-color-text-alt);
+                flex: 0 0 auto;
+            }
+ 
+            .field-name {
+                font-weight: 600;
+                font-size: 0.9em;
+            }
+ 
+            .field-type {
+                font-size: 0.72em;
+            }
+ 
+            .field-options {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+                margin-left: 4px;
+            }
+ 
+            .option-tag {
+                margin: 0;
+                font-size: 0.72em;
+            }
+ 
+            .count-badge {
+                margin-left: auto;
+                font-size: 0.75em;
+            }
+ 
+            details.field-tree,
+            details.block-node,
+            details.area-node {
+                border-left: 2px solid var(--uui-color-divider);
+                padding-left: 4px;
+            }
+ 
+            details.field-tree > summary,
+            details.block-node > summary,
+            details.area-node > summary {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 8px;
+                cursor: pointer;
+                list-style: none;
+            }
+ 
+            details.field-tree > summary::-webkit-details-marker,
+            details.block-node > summary::-webkit-details-marker,
+            details.area-node > summary::-webkit-details-marker {
+                display: none;
+            }
+ 
+            details.field-tree > summary::before,
+            details.block-node > summary::before,
+            details.area-node > summary::before {
+                content: "▸";
+                display: inline-block;
+                transition: transform 0.15s ease;
+                color: var(--uui-color-text-alt);
+                flex: 0 0 auto;
+            }
+ 
+            details[open] > summary::before {
+                transform: rotate(90deg);
+            }
+ 
+            .field-children,
+            .block-children,
+            .area-children {
+                margin-left: 20px;
+                padding-left: 8px;
+                border-left: 1px dashed var(--uui-color-divider);
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+                padding-bottom: 4px;
+            }
+ 
+            .area-children {
+                flex-direction: row;
+                flex-wrap: wrap;
             }
         `,
     ];
