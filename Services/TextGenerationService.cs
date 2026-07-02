@@ -41,7 +41,13 @@ public class TextGenerationService : ITextGenerationService
             Model = _options.Model,
             Stream = false,
             ConversationId = conversationId,
-            Messages = messages
+            Messages = messages,
+            Options = new ChatOptions
+            {
+                ContextSize = _options.ContentContextSize,
+                Temperature = _options.Temperature,
+                TopP = _options.TopP
+            }
         };
 
         var json = JsonSerializer.Serialize(request);
@@ -107,7 +113,13 @@ public class TextGenerationService : ITextGenerationService
             Model = _options.Model,
             Stream = true,
             ConversationId = conversationId,
-            Messages = messages
+            Messages = messages,
+            Options = new ChatOptions
+            {
+                ContextSize = _options.ContentContextSize,
+                Temperature = _options.Temperature,
+                TopP = _options.TopP
+            }
         };
 
         var json = JsonSerializer.Serialize(request);

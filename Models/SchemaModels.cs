@@ -8,6 +8,8 @@ public record PageSchema
 {
     public string PageType { get; init; } = "";
     public List<string> Fields { get; init; } = [];
+    public string DocumentTypeId { get; set; } = "";      // NEW
+    public string? DefaultTemplateId { get; set; }          // NEW
     public List<BlockPropertySchema> BlockProperties { get; init; } = [];
 }
 

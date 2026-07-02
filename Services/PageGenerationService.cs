@@ -123,7 +123,7 @@ public class PageGenerationService : IPageGenerationService
             lastErrors = validation.Errors;
             Log("CONTENT VALIDATION FAILED", string.Join("\n", lastErrors));
 
-            currentPrompt = BuildContentFixPrompt(prompt, lastErrors, pageShell);
+            currentPrompt = BuildContentFixPrompt(lastErrors);
         }
 
         throw new InvalidOperationException(
@@ -142,7 +142,7 @@ public class PageGenerationService : IPageGenerationService
         {
             var currentPrompt = attempt == 0
                 ? prompt
-                : BuildPlanFixPrompt(prompt, lastErrors, schema);
+                : BuildPlanFixPrompt(lastErrors);
 
             var plan = await PlanPageAsync(currentPrompt, conversationId, schema, ct);
             var validation = ValidatePlan(plan, schema);
@@ -503,111 +503,26 @@ public class PageGenerationService : IPageGenerationService
 
     // ─── Prompt Building ──────────────────────────────────────────────────────
 
-    private string BuildContentFixPrompt(string originalPrompt, List<string> errors, LlmPageResponse shell)
+    private string BuildContentFixPrompt(List<string> errors)
     {
-        var json = JsonSerializer.Serialize(shell, new JsonSerializerOptions
-        {
-            WriteIndented = true,
-            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
-        });
-
         return $"""
         Your previous response was incomplete or invalid. Fix it and return only raw JSON.
-
-        ORIGINAL REQUEST: {originalPrompt}
 
         ERRORS TO FIX:
         {string.Join("\n", errors)}
 
-        RULES:
-        - Return the COMPLETE JSON structure unchanged — same keys, same nesting, same arrays
-        - Fill EVERY empty string ("") with realistic content
-        - Do NOT add, remove, or rename any keys
-        - Do NOT wrap in markdown
-        - Return valid JSON only
-
-        INPUT:
-        {json}
         """;
     }
 
-    private string BuildPlanFixPrompt(string originalPrompt, List<string> errors, LlmPlanningSchema schema)
+    private string BuildPlanFixPrompt(List<string> errors)
     {
-        var sb = new StringBuilder();
-        foreach (var pt in schema.PageTypes)
-        {
-            sb.AppendLine($"PAGE TYPE: {pt.Name}");
-            foreach (var r in pt.Regions)
-            {
-                sb.AppendLine($"  REGION: {r.Name}");
-
-                foreach (var b in r.DirectBlocks)
-                {
-                    if (b.NestedSlots.Count == 0)
-                    {
-                        sb.AppendLine($"    Block: {b.Name}");
-                    }
-                    else
-                    {
-                        sb.AppendLine($"    Block: {b.Name}");
-                        foreach (var slot in b.NestedSlots)
-                        {
-                            var allowed = slot.AllowedBlocks.Count > 0
-                                ? string.Join(", ", slot.AllowedBlocks)
-                                : "any block";
-                            sb.AppendLine($"      nested slot \"{slot.Alias}\": {allowed}");
-                        }
-                    }
-                }
-
-                // AFTER
-                foreach (var c in r.AreaContainers)
-                {
-                    sb.AppendLine($"    Area container: {c.BlockName}");
-                    foreach (var area in c.Areas)
-                    {
-                        if (area.AllowedBlocks.Count == 0)
-                        {
-                            sb.AppendLine($"      area alias \"{area.Alias}\" (max 1 block):");
-                            continue;
-                        }
-
-                        sb.AppendLine($"      area alias \"{area.Alias}\" (max 1 block):");
-                        foreach (var allowedName in area.AllowedBlocks)
-                        {
-                            var def = r.AvailableBlockDefs.FirstOrDefault(b => b.Name == allowedName);
-                            sb.AppendLine($"        * {allowedName}");
-                            if (def is { NestedSlots.Count: > 0 })
-                            {
-                                foreach (var slot in def.NestedSlots)
-                                {
-                                    var slotAllowed = slot.AllowedBlocks.Count > 0
-                                        ? string.Join(", ", slot.AllowedBlocks)
-                                        : "any block";
-                                    sb.AppendLine($"            nested slot \"{slot.Alias}\": {slotAllowed}");
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
 
         return $"""
         Your previous response was invalid. Fix it and return only raw JSON.
 
-        ORIGINAL REQUEST: {originalPrompt}
-
         ERRORS TO FIX:
         {string.Join("\n", errors)}
 
-        AVAILABLE SCHEMA:
-        {sb.ToString().TrimEnd()}
-
-        RULES:
-        - Use only the pageTypes, block names, area aliases, and nested slot names listed above
-        - Match the regions array structure exactly as shown in the original prompt
-        - Return valid JSON only, no markdown
         """;
     }
 

@@ -1,7 +1,119 @@
 using thta_ai.Models;
+using System.Text.Json;
 
 public class ContentMappingService : IContentMappingService
 {
+
+    public PageSchema MapRawSchemaToPageSchema(JsonElement rawSchema, string pageType)
+    {
+        JsonElement? matchedPage = null;
+        foreach (var page in rawSchema.EnumerateArray())
+        {
+            var alias = page.GetProperty("docType").GetProperty("alias").GetString();
+            if (alias == pageType)
+            {
+                matchedPage = page;
+                break;
+            }
+        }
+
+        if (matchedPage is null)
+            throw new InvalidOperationException($"Unknown page type: {pageType}");
+
+        var docType = matchedPage.Value.GetProperty("docType");
+
+        var schema = new PageSchema
+        {
+            PageType = pageType,
+            DocumentTypeId = docType.GetProperty("id").GetString() ?? "",
+            DefaultTemplateId = docType.TryGetProperty("defaultTemplate", out var template)
+                && template.ValueKind != JsonValueKind.Null
+                ? template.GetProperty("id").GetString()
+                : null
+        };
+
+
+        foreach (var prop in matchedPage.Value.GetProperty("properties").EnumerateArray())
+        {
+            var editorAlias = prop.GetProperty("type").GetString() ?? "";
+            if (editorAlias is not ("Umbraco.BlockGrid" or "Umbraco.BlockList")) continue;
+
+            var propAlias = prop.GetProperty("alias").GetString() ?? "";
+            var blockProp = new BlockPropertySchema
+            {
+                Alias = propAlias,
+                EditorAlias = editorAlias
+            };
+
+            if (prop.TryGetProperty("blocks", out var blocks))
+            {
+                var seen = new HashSet<string>();
+                foreach (var block in blocks.EnumerateArray())
+                    CollectBlockDefs(block, blockProp, seen);
+            }
+            schema.BlockProperties.Add(blockProp);
+        }
+
+        return schema;
+    }
+
+    // Recursively walks a block definition and every block reachable through its
+    // nested BlockList/BlockGrid properties or area allowedBlocks, so blockLookup/
+    // allBlockDefs in MapLlmResponse can resolve ANY block the LLM might reference
+    // (top-level containers, plain content blocks, and nested blocks like Button/Accordion).
+    // Recursively walks a block definition and every block reachable through its
+    // nested BlockList/BlockGrid properties, adding each discovered def into either
+    // DirectBlocks (no areas — a leaf/content block) or AreaContainers (has areas —
+    // a layout block whose areas hold further blocks).
+    private void CollectBlockDefs(JsonElement blockJson, BlockPropertySchema blockProp, HashSet<string> seen)
+    {
+        var name = blockJson.GetProperty("name").GetString() ?? "";
+        if (!seen.Add(name)) return; // already collected, avoid infinite loop on shared nested blocks
+
+        var def = new BlockDefinition
+        {
+            Id = blockJson.GetProperty("id").GetString() ?? "",
+            Name = name,
+            Fields = [],
+            Areas = []
+        };
+
+        if (blockJson.TryGetProperty("properties", out var props))
+        {
+            foreach (var prop in props.EnumerateArray())
+            {
+                var fieldAlias = prop.GetProperty("alias").GetString() ?? "";
+                var fieldEditorAlias = prop.GetProperty("type").GetString() ?? "";
+
+                def.Fields.Add(new BlockField { Alias = fieldAlias, EditorAlias = fieldEditorAlias });
+
+                if (fieldEditorAlias is "Umbraco.BlockList" or "Umbraco.BlockGrid"
+                    && prop.TryGetProperty("blocks", out var nestedBlocks))
+                {
+                    foreach (var nested in nestedBlocks.EnumerateArray())
+                        CollectBlockDefs(nested, blockProp, seen);
+                }
+            }
+        }
+
+        if (blockJson.TryGetProperty("areas", out var areas))
+        {
+            foreach (var area in areas.EnumerateArray())
+            {
+                def.Areas.Add(new AreaDefinition
+                {
+                    Key = area.TryGetProperty("key", out var k) ? k.GetString() ?? "" : "",
+                    Alias = area.GetProperty("alias").GetString() ?? "",
+                    ColumnSpan = area.TryGetProperty("columnSpan", out var cs) ? cs.GetInt32() : 1,
+                });
+            }
+        }
+
+        if (def.Areas.Count > 0)
+            blockProp.AreaContainers.Add(def);
+        else
+            blockProp.DirectBlocks.Add(def);
+    }
     // ─── LLM Response Mapping ─────────────────────────────────────────────────
 
     /// <summary>
@@ -33,12 +145,12 @@ public class ContentMappingService : IContentMappingService
         var blocksByAlias = new Dictionary<string, List<LlmBlock>>();
         foreach (var llmBlock in llmResponse.Blocks)
         {
-            if (!blockLookup.TryGetValue(llmBlock.Name, out var match)) continue;
-            var alias = match.BlockProperty.Alias;
-            if (!blocksByAlias.TryGetValue(alias, out var list))
+            if (string.IsNullOrEmpty(llmBlock.Region)) continue; // defensive, shouldn't happen post-ExpandPlanFromRaw
+
+            if (!blocksByAlias.TryGetValue(llmBlock.Region, out var list))
             {
                 list = [];
-                blocksByAlias[alias] = list;
+                blocksByAlias[llmBlock.Region] = list;
             }
             list.Add(llmBlock);
         }
@@ -60,16 +172,27 @@ public class ContentMappingService : IContentMappingService
             });
         }
 
+        var headerTitle = llmResponse.Blocks
+            .FirstOrDefault(b => b.Region == "headerContent")
+            ?.Fields.GetValueOrDefault("title")?.ToString();
+
         return new DocumentCreateModel
         {
             Values = values,
+            DocumentType = new DocumentTypeModel { Id = schema.DocumentTypeId },
+            Template = schema.DefaultTemplateId is not null
+                        ? new TemplateModel { Id = schema.DefaultTemplateId }
+                        : null,
             Variants =
             [
                 new()
                 {
                     Culture = null,
                     Segment = null,
-                    Name = llmResponse.Fields.GetValueOrDefault("title")?.ToString() ?? "New Page"
+                    Name = !string.IsNullOrWhiteSpace(headerTitle)
+                        ? headerTitle
+                        : llmResponse.Fields.GetValueOrDefault("metaTitle")?.ToString() ?? "New Page",
+
                 }
             ]
         };
@@ -111,7 +234,7 @@ public class ContentMappingService : IContentMappingService
                         contentData.Add(BuildContentEntry(innerUdi, innerDef, innerLlmBlock, allBlockDefs));
                     }
 
-                    areaLayouts.Add(new { key = area.Alias, items = areaItems });
+                    areaLayouts.Add(new { key = area.Key, items = areaItems });
                 }
 
                 layout.Add(new { contentUdi = udi, areas = areaLayouts });
@@ -222,6 +345,9 @@ public class ContentMappingService : IContentMappingService
 
             // Checkbox
             "Umbraco.TrueFalse" => value is bool b ? b : str.Equals("true", StringComparison.OrdinalIgnoreCase),
+
+            // Integer
+            "Umbraco.Integer" => int.TryParse(str, out var i) ? i : (object?)null,
 
             // Pass through as-is
             _ => value,

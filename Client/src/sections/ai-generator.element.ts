@@ -146,7 +146,10 @@ export class AIGeneratorView extends UmbLitElement {
                 }),
             });
 
-            if (!mapResponse.ok) throw new Error("Content mapping failed");
+            if (!mapResponse.ok) {
+                const text = await mapResponse.text();
+                throw new Error(`Content mapping failed: ${text}`);
+            }
 
             this._mappedContent = await mapResponse.json();
 
@@ -154,14 +157,9 @@ export class AIGeneratorView extends UmbLitElement {
 
             const mapped = this._mappedContent as any;
 
-            // documentTypeId and templateId come from the mapped result, not the raw LLM output
-            const { documentTypeId, templateId } = mapped;
-
             const createPayload = {
                 ...mapped,
-                documentType: { id: documentTypeId },
                 parent: { id: this._selectedParentId },
-                ...(templateId ? { template: { id: templateId } } : {}),
             };
 
             const createResponse = await fetch("/umbraco/management/api/v1/document", {
@@ -227,20 +225,20 @@ export class AIGeneratorView extends UmbLitElement {
 
                     <uui-form-layout-item label="Parent Page">
                         ${this._parentLoading
-                            ? html`<uui-loader></uui-loader>`
-                            : html`
+                ? html`<uui-loader></uui-loader>`
+                : html`
                                 <h4>Select the Parent Page</h4>
                                 <uui-select
                                     label="Parent Page"
                                     placeholder="Select a parent page"
                                     .options=${this._parentPages.map(p => ({
-                                        name: p.name,
-                                        value: p.id,
-                                        selected: p.id === this._selectedParentId,
-                                    }))}
+                    name: p.name,
+                    value: p.id,
+                    selected: p.id === this._selectedParentId,
+                }))}
                                     @change=${(e: Event) => {
-                                        this._selectedParentId = (e.target as HTMLSelectElement).value;
-                                    }}>
+                        this._selectedParentId = (e.target as HTMLSelectElement).value;
+                    }}>
                                 </uui-select>
                             `}
                     </uui-form-layout-item>
@@ -251,8 +249,8 @@ export class AIGeneratorView extends UmbLitElement {
                             placeholder="Describe the page you want to generate..."
                             label="Prompt"
                             @input=${(e: Event) => {
-                                this._prompt = (e.target as HTMLTextAreaElement).value;
-                            }}>
+                this._prompt = (e.target as HTMLTextAreaElement).value;
+            }}>
                         </uui-textarea>
                     </uui-form-layout-item>
 
