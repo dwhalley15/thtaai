@@ -81,8 +81,9 @@ namespace thta_ai.Controllers
         [ProducesResponseType(typeof(DocumentCreateModel), StatusCodes.Status200OK)]
         public IActionResult MapContent([FromBody] MapContentRequest request)
         {
-            var result = _contentMappingService.MapLlmResponse(request.LlmResponse, request.Schema);
-            return Ok(result);
+            var pageSchema = _contentMappingService.MapRawSchemaToPageSchema(request.Schema, request.LlmResponse.PageType);
+            var mapped = _contentMappingService.MapLlmResponse(request.LlmResponse, pageSchema);
+            return Ok(mapped);
         }
 
         [HttpPost("generateStream")]

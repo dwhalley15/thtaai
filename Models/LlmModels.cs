@@ -135,7 +135,7 @@ public record CleanSchemaResponse
 public record MapContentRequest
 {
     public LlmPageResponse LlmResponse { get; init; } = new();
-    public PageSchema Schema { get; init; } = new();
+    public JsonElement Schema { get; init; } = new();
 }
 
 public record GeneratePageRequest

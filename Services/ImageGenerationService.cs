@@ -32,7 +32,13 @@ public class ImageGenerationService : IImageGenerationService
         {
             Model = _options.Model,
             Stream = false,
-            Messages = messages
+            Messages = messages,
+            Options = new ChatOptions
+            {
+                ContextSize = _options.ContentContextSize,
+                Temperature = _options.Temperature,
+                TopP = _options.TopP
+            }
         };
 
         var json = JsonSerializer.Serialize(request);
