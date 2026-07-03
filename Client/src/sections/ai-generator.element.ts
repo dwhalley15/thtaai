@@ -79,6 +79,14 @@ export class AIGeneratorView extends UmbLitElement {
             return;
         }
 
+        this._schema = this._getRawSchema();
+
+        if (!this._schema.length) {
+            this._errorMessage = "No page schema found. Generate or load a schema before creating a page.";
+            return;
+        }
+
+
         this._loading = true;
 
         if (this._isNewConversation) {
@@ -87,10 +95,6 @@ export class AIGeneratorView extends UmbLitElement {
 
         try {
             const token = await this._getToken();
-
-            this._schema = this._getRawSchema();
-
-            console.log("Raw schema:", this._schema);
 
             const response = await fetch("/umbraco/thtaai/api/v1/generatePage", {
                 method: "POST",
@@ -378,7 +382,7 @@ export class AIGeneratorView extends UmbLitElement {
                             look="primary"
                             color="positive"
                             label="Generate"
-                            ?disabled=${this._loading}
+                            ?disabled=${this._loading || !this._getRawSchema().length}
                             @click=${this._generate}>
                             Generate Page
                         </uui-button>
@@ -394,10 +398,13 @@ export class AIGeneratorView extends UmbLitElement {
                         <uui-tag look="danger">${this._errorMessage}</uui-tag>
                     ` : null}
 
+
+
                     <uui-form-layout-item label="Parent Page">
                         ${this._parentLoading
                 ? html`<uui-loader></uui-loader>`
                 : html`
+                <h4>Select where this page should be created</h4>
                                 <uui-select
                                     label="Parent Page"
                                     placeholder="Select a parent page"
