@@ -25,11 +25,11 @@
   ],
   "Screenshots": [
     {
-      "ImageUrl": "https://raw.githubusercontent.com/dwhalley15/thtaai/main/docs/screenshot-generate-modal.png",
+      "ImageUrl": "https://raw.githubusercontent.com/dwhalley15/thtaai/refs/heads/main/docs/screenshot-generate-modal.png",
       "Caption": "Chat-style content generation modal"
     },
     {
-      "ImageUrl": "https://raw.githubusercontent.com/dwhalley15/thtaai/main/docs/screenshot-page-generation.png",
+      "ImageUrl": "https://raw.githubusercontent.com/dwhalley15/thtaai/refs/heads/main/docs/screenshot-page-generation.png",
       "Caption": "AI Page Generation schema view"
     }
   ]
