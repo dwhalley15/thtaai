@@ -18,8 +18,8 @@
     <Company>the human tech agency</Company>
     <Description>AI-powered content generation for Umbraco 17. Can be configured to use any LLM API (e.g. Ollama) to automatically generate CMS content.</Description>
     <PackageTags>umbraco umbraco-marketplace ai llm content-generation</PackageTags>
-    <PackageProjectUrl>https://github.com/yourname/thta-ai</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/yourname/thta-ai</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/dwhalley15/thtaai</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dwhalley15/thtaai</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
