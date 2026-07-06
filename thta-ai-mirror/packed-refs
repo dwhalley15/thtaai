@@ -1,0 +1,14 @@
+# pack-refs with: peeled fully-peeled sorted 
+560e1427c6228f242a251154660a1c6b5bc00899 refs/heads/dev-added-ai-section
+115db5e0382587cb097d866fb4893cb7086dc04e refs/heads/dev-build-prep
+1b755e2c01303b2909cea5b15382ec665587b7d2 refs/heads/dev-image-generator
+fa77d344c8cc9999f44afb0a0131f1adcef537a4 refs/heads/dev-major-refactor
+0c9d0a8aab318ba5976b1c935c541842038886ac refs/heads/dev-minor-design-forgen-section
+1ddcfcf1ac31180d456f12225db3e64d6f84adfe refs/heads/dev-nested-blocks-field-types
+5cf26eb0f4fcb0dc9ff302ce989e947cc0f647c4 refs/heads/dev-now-publishing-pages
+13ba82e98c77805df889cce911cd08eb040b7521 refs/heads/dev-page-gen-redesign
+49a705f8d1159d27c38dd56ed4e556821e578d97 refs/heads/dev-redesigned-gen-schema-fe
+86ffec8bd85979fdc093c1bfc4e720c8b36a7aa0 refs/heads/dev-stopping-point
+f18c7363cc9055586fe97523010febb81aa042bf refs/heads/dev-update-with-model-selection
+3d617828765bb9cdfc9b8b14a089033789a90bde refs/heads/dev-valid-schema
+f99f834c6dee878a0a6bdff8c1f3076324b239ea refs/heads/main
