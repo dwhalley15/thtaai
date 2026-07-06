@@ -1,0 +1,36 @@
+{
+  "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
+  "Title": "ThtaAI",
+  "AuthorDetails": {
+    "Name": "David Whalley",
+    "Description": "Developer at the human tech agency.",
+    "Url": "https://github.com/dwhalley15",
+    "ImageUrl": "https://avatars.githubusercontent.com/u/77077742?v=4",
+    "SyncContributorsFromRepository": true
+  },
+  "Category": "Artificial Intelligence",
+  "Description": "AI-powered content generation for the Umbraco backoffice. Uses a local LLM (or other LLM API) to generate page content, block content, and full pages from natural-language prompts, with editorial review before anything publishes.",
+  "DocumentationUrl": "https://github.com/dwhalley15/thtaai#readme",
+  "IssueTrackerUrl": "https://github.com/dwhalley15/thtaai/issues",
+  "LicenseTypes": [
+    "Free"
+  ],
+  "PackageType": "Package",
+  "Tags": [
+    "ai",
+    "llm",
+    "content-generation",
+    "ollama",
+    "editor"
+  ],
+  "Screenshots": [
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/dwhalley15/thtaai/main/docs/screenshot-generate-modal.png",
+      "Caption": "Chat-style content generation modal"
+    },
+    {
+      "ImageUrl": "https://raw.githubusercontent.com/dwhalley15/thtaai/main/docs/screenshot-page-generation.png",
+      "Caption": "AI Page Generation schema view"
+    }
+  ]
+}
