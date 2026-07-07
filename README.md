@@ -14,6 +14,7 @@ It provides AI-assisted property editors, a rich text editor toolbar extension, 
 ## Prerequisites
 
 - Umbraco CMS 17
+- Umbraco Delivery API Enabled
 - [Ollama](https://ollama.com) running and reachable from your Umbraco site, with a chat-capable model pulled (we've had the best results with `qwen2.5:7b`)
 - Optional: a [Pixabay API key](https://pixabay.com/api/docs/) if you want the AI Image editor to return results
 

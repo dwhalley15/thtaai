@@ -11,11 +11,12 @@
   "Category": "Artificial Intelligence",
   "Description": "AI-powered content generation for the Umbraco backoffice. Uses a local LLM (or other LLM API) to generate page content, block content, and full pages from natural-language prompts, with editorial review before anything publishes.",
   "DocumentationUrl": "https://github.com/dwhalley15/thtaai#readme",
+  "DiscussionForumUrl": "https://forum.umbraco.com/t/new-package-thtaai-ai-content-generation-for-umbraco-without-vendor-lock-in/8286",
   "IssueTrackerUrl": "https://github.com/dwhalley15/thtaai/issues",
   "LicenseTypes": [
     "Free"
   ],
-  "PackageType": "Package",
+  "PackageType": "Integration",
   "Tags": [
     "ai",
     "llm",
