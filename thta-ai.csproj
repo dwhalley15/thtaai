@@ -8,7 +8,7 @@
   </PropertyGroup>
 
    <PropertyGroup>
-    <PackageId>ThtaAi</PackageId>
+    <PackageId>thtaai</PackageId>
     <Product>ThtaAi</Product>
     <Title>THTA AI</Title>
 
@@ -26,7 +26,6 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <!-- Build behaviour -->
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
@@ -45,22 +44,38 @@
     <Content Remove="Client\**" />
 
     <!-- However make the Umbraco-package.json included for dotnet pack or nuget package and visible to the solution -->
-    <None Include="Client\public\umbraco-package.json" Pack="false" />
+    <Content Include="wwwroot\App_Plugins\thtaai\**\*"
+           CopyToOutputDirectory="PreserveNewest"
+           Pack="true"
+           PackagePath="wwwroot\App_Plugins\thtaai\" />
+
+    <None Include="wwwroot\App_Plugins\thtaai\**\*"
+          Pack="true"
+          PackagePath="content\App_Plugins\thtaai\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <!-- Ship our own build target — NuGet auto-imports build\{PackageId}.targets into consuming projects -->
+    <None Include="build\ThtaAi.targets" Pack="true" PackagePath="build\ThtaAi.targets" />
 
     <!-- Package assets that need to physically land in the .nupkg -->
     <None Include="icon.png" Pack="true" PackagePath="\" />
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="wwwroot\" />
-  </ItemGroup>
+  <Target Name="BuildClientAssets"
+        BeforeTargets="Build">
 
-  <Target Name="BuildClientAssets" BeforeTargets="Build">
-    <Exec Command="npm ci" WorkingDirectory="Client" Condition="!Exists('Client/node_modules')" />
-    <Exec Command="npm run build" WorkingDirectory="Client" />
+    <Exec Command="npm ci"
+          WorkingDirectory="Client"
+          Condition="!Exists('Client/node_modules')" />
+
+    <Exec Command="npm run build"
+          WorkingDirectory="Client" />
+
+    <MakeDir Directories="wwwroot/App_Plugins/thtaai" />
+
     <Copy SourceFiles="Client/public/umbraco-package.json"
           DestinationFolder="wwwroot/App_Plugins/thtaai" />
+
   </Target>
 
 </Project>
