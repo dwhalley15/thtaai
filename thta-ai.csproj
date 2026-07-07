@@ -4,7 +4,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>thta_ai</RootNamespace>
-    <StaticWebAssetBasePath>/</StaticWebAssetBasePath>
   </PropertyGroup>
 
    <PropertyGroup>
@@ -49,12 +48,6 @@
            Pack="true"
            PackagePath="wwwroot\App_Plugins\thtaai\" />
 
-    <None Include="wwwroot\App_Plugins\thtaai\**\*"
-          Pack="true"
-          PackagePath="content\App_Plugins\thtaai\%(RecursiveDir)%(Filename)%(Extension)" />
-
-    <!-- Ship our own build target — NuGet auto-imports build\{PackageId}.targets into consuming projects -->
-    <None Include="build\ThtaAi.targets" Pack="true" PackagePath="build\ThtaAi.targets" />
 
     <!-- Package assets that need to physically land in the .nupkg -->
     <None Include="icon.png" Pack="true" PackagePath="\" />
@@ -62,7 +55,7 @@
   </ItemGroup>
 
   <Target Name="BuildClientAssets"
-        BeforeTargets="Build">
+        BeforeTargets="PrepareForPack">
 
     <Exec Command="npm ci"
           WorkingDirectory="Client"
@@ -75,6 +68,12 @@
 
     <Copy SourceFiles="Client/public/umbraco-package.json"
           DestinationFolder="wwwroot/App_Plugins/thtaai" />
+
+    <ItemGroup>
+      <Content Include="wwwroot\App_Plugins\thtaai\**\*"
+              Pack="true"
+              PackagePath="wwwroot\App_Plugins\thtaai\" />
+    </ItemGroup>
 
   </Target>
 
