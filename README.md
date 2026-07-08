@@ -21,7 +21,7 @@ It provides AI-assisted property editors, a rich text editor toolbar extension, 
 ## Installation
 
 ```bash
-dotnet add package ThtaAi
+dotnet add package thtaai
 ```
 
 Then add configuration to your project's `appsettings.json` (see below) and restart the site. The property editors and the **AI Generation** backoffice section become available immediately — no further setup required.
