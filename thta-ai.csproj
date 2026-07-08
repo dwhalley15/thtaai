@@ -12,7 +12,7 @@
     <Title>THTA AI</Title>
 
     <!-- Packaging metadata -->
-    <Version>1.0.6</Version>
+    <Version>1.0.7</Version>
     <Authors>David Whalley</Authors>
     <Company>the human tech agency</Company>
     <Description>AI-powered content generation for Umbraco 17. Can be configured to use any LLM API (e.g. Ollama) to automatically generate CMS content.</Description>
@@ -43,13 +43,20 @@
     <!-- Dont include the client folder as part of packaging nuget build -->
     <Content Remove="Client\**" />
 
+    <Content Remove="umbraco-marketplace.json" />
+    <None Remove="umbraco-marketplace.json" />
+
+    <!-- Explicitly pack it at the .nupkg root — visible in the package,
+        but NOT copied into a consumer's project on install -->
+    <None Include="umbraco-marketplace.json" Pack="true" PackagePath="\" />
+
     <!-- Package assets that need to physically land in the .nupkg -->
     <None Include="icon.png" Pack="true" PackagePath="\" />
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
   <Target Name="BuildClientAssets"
-        BeforeTargets="PrepareForPack">
+        BeforeTargets="BeforeBuild">
 
     <Exec Command="npm ci"
           WorkingDirectory="Client"
