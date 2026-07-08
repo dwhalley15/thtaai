@@ -16,7 +16,7 @@
   "LicenseTypes": [
     "Free"
   ],
-  "PackageType": "Integration",
+  "PackageType": "Package",
   "Tags": [
     "ai",
     "llm",

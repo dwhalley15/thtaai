@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="ThtaAiCopyAppPlugins" AfterTargets="Build">
+    <ItemGroup>
+      <ThtaAiAppPluginsFiles Include="$(MSBuildThisFileDirectory)..\staticwebassets\App_Plugins\thtaai\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(ThtaAiAppPluginsFiles)"
+          DestinationFolder="$(MSBuildProjectDirectory)\wwwroot\App_Plugins\thtaai\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>
