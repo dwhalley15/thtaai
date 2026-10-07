@@ -1,7 +1,7 @@
 import { UmbTiptapToolbarElementApiBase } from '@umbraco-cms/backoffice/tiptap';
-import type { Editor } from '@umbraco-cms/backoffice/tiptap';
+import type { Editor } from '@tiptap/core';
 import { UMB_MODAL_MANAGER_CONTEXT } from '@umbraco-cms/backoffice/modal';
-import { THTA_AI_PROMPT_MODAL } from '../modals/prompt-modal.token';
+import { HU_GEN_PROMPT_MODAL } from '../modals/prompt-modal.token';
 
 export default class AiToolbarApi extends UmbTiptapToolbarElementApiBase {
 
@@ -18,7 +18,7 @@ export default class AiToolbarApi extends UmbTiptapToolbarElementApiBase {
 
         const modalHandler = modalManager.open(
             this,
-            THTA_AI_PROMPT_MODAL,
+            HU_GEN_PROMPT_MODAL,
             { data: { prompt: '', mode: 'html' } }
         );
 

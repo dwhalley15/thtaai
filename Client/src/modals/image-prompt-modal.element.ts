@@ -15,7 +15,7 @@ import type {
     ImagePromptModalValue
 } from "./image-prompt-modal.token";
 
-@customElement("thta-ai-image-prompt-modal")
+@customElement("hu-gen-image-prompt-modal")
 export class ImagePromptModalElement
     extends UmbLitElement
     implements UmbModalExtensionElement<
@@ -74,7 +74,7 @@ export class ImagePromptModalElement
             const auth = await this.getContext(UMB_AUTH_CONTEXT);
             const token = await auth?.getLatestToken();
 
-            const res = await fetch("/umbraco/thtaai/api/v1/generateImage", {
+            const res = await fetch("/umbraco/hu-gen/api/v1/generateImage", {
                 method: "POST",
                 credentials: "include",
                 headers: {
@@ -117,7 +117,7 @@ export class ImagePromptModalElement
         const auth = await this.getContext(UMB_AUTH_CONTEXT);
         const token = await auth?.getLatestToken();
 
-        const res = await fetch("/umbraco/thtaai/api/v1/uploadImage", {
+        const res = await fetch("/umbraco/hu-gen/api/v1/uploadImage", {
             method: "POST",
             credentials: "include",
             headers: {

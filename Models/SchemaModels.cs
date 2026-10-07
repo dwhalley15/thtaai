@@ -1,4 +1,4 @@
-namespace thta_ai.Models;
+namespace HuGen.Models;
 
 // ─── Page / Block Schema ──────────────────────────────────────────────────────
 // These models represent the CMS page structure extracted by the TypeScript

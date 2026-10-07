@@ -1,7 +1,7 @@
 export const manifests = [
   {
     type: "section",
-    alias: "thta_ai.Section",
+    alias: "hu-gen.Section",
     name: "AI Generator Section",
     meta: {
       label: "AI Generator",
@@ -10,7 +10,7 @@ export const manifests = [
   },
   {
     type: "sectionView",
-    alias: "thta_ai.SectionView",
+    alias: "hu-gen.SectionView",
     name: "AI Generator Section View",
     element: () => import("./ai-generator.element"),
     meta: {
@@ -21,13 +21,13 @@ export const manifests = [
     conditions: [
       {
         alias: "Umb.Condition.SectionAlias",
-        match: "thta_ai.Section",
+        match: "hu-gen.Section",
       },
     ],
   },
   {
     type: "sectionView",
-    alias: "thta_ai.SectionView.Templates",
+    alias: "hu-gen.SectionView.Templates",
     name: "Schema Generator View",
     element: () => import("./template-generator.element"),
     meta: {
@@ -38,7 +38,7 @@ export const manifests = [
     conditions: [
       {
         alias: "Umb.Condition.SectionAlias",
-        match: "thta_ai.Section",
+        match: "hu-gen.Section",
       },
     ],
   },

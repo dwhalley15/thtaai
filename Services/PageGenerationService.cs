@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using thta_ai.Models;
+using HuGen.Models;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 
@@ -832,7 +832,7 @@ public class PageGenerationService : IPageGenerationService
     private void Log(string label, string content)
     {
         var line = $"[{DateTime.Now:HH:mm:ss}] ╔══ {label} ══╗\n{content}\n╚══ END {label} ══╝\n\n";
-        File.AppendAllText("C:\\temp\\thta_ai_debug.log", line);
+        File.AppendAllText("C:\\temp\\hu-gen_debug.log", line);
     }
 
 

@@ -10,9 +10,9 @@ using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Api.Management.OpenApi;
 using Umbraco.Cms.Api.Common.OpenApi;
 
-namespace thta_ai.Composers
+namespace HuGen.Composers
 {
-    public class thtaaiApiComposer : IComposer
+    public class HuGenApiComposer : IComposer
     {
         public void Compose(IUmbracoBuilder builder)
         {
@@ -51,7 +51,7 @@ namespace thta_ai.Composers
                 // Along with having a generated swagger JSON file that we can use to auto generate a TypeScript client
                 opt.SwaggerDoc(Constants.ApiName, new OpenApiInfo
                 {
-                    Title = "thtaaiBackoffice API",
+                    Title = "HuGen Backoffice API",
                     Version = "1.0",
                     // Contact = new OpenApiContact
                     // {
@@ -63,11 +63,11 @@ namespace thta_ai.Composers
 
                 // Enable Umbraco authentication for the "Example" Swagger document
                 // PR: https://github.com/umbraco/Umbraco-CMS/pull/15699
-                opt.OperationFilter<thtaaiOperationSecurityFilter>();
+                opt.OperationFilter<HuGenOperationSecurityFilter>();
             });
         }
 
-        public class thtaaiOperationSecurityFilter : BackOfficeSecurityRequirementsOperationFilterBase
+        public class HuGenOperationSecurityFilter : BackOfficeSecurityRequirementsOperationFilterBase
         {
             protected override string ApiName => Constants.ApiName;
 
@@ -84,7 +84,7 @@ namespace thta_ai.Composers
 
             protected override bool CanHandle(ApiDescription apiDescription, ControllerActionDescriptor controllerActionDescriptor)
             {
-                return controllerActionDescriptor.ControllerTypeInfo.Namespace?.StartsWith("thta_ai.Controllers", comparisonType: StringComparison.InvariantCultureIgnoreCase) is true;
+                return controllerActionDescriptor.ControllerTypeInfo.Namespace?.StartsWith("HuGen.Controllers", comparisonType: StringComparison.InvariantCultureIgnoreCase) is true;
             }
 
             public override string Handle(ApiDescription apiDescription) => $"{apiDescription.ActionDescriptor.RouteValues["action"]}";

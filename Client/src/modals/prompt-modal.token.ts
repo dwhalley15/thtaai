@@ -10,11 +10,11 @@ export type PromptModalValue = {
     generated?: string;
 };
 
-export const THTA_AI_PROMPT_MODAL = new UmbModalToken<
+export const HU_GEN_PROMPT_MODAL = new UmbModalToken<
     PromptModalData,
     PromptModalValue
 >(
-    "thta-ai-prompt-modal",
+    "hu-gen-prompt-modal",
     {
         modal: {
             type: "dialog",

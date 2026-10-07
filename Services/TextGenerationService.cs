@@ -2,7 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
-using thta_ai.Models;
+using HuGen.Models;
 using System.Runtime.CompilerServices;
 
 public class TextGenerationService : ITextGenerationService

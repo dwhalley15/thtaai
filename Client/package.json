@@ -1,15 +1,15 @@
 {
-  "name": "thta-ai",
+  "name": "hu-gen",
   "private": true,
   "version": "0.1.1",
   "type": "module",
   "scripts": {
     "watch": "tsc && vite build --watch",
     "build": "tsc && vite build",
-    "generate-client": "node scripts/generate-openapi.js https://localhost:5000/umbraco/swagger/thtaai/swagger.json"
+    "generate-client": "node scripts/generate-openapi.js https://localhost:5000/umbraco/swagger/hu-gen/swagger.json"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.97.1",
+    "@hey-api/openapi-ts": "0.81.1",
     "@types/node": "^25.9.0",
     "@umbraco-cms/backoffice": "^*",
     "chalk": "^5.6.2",

@@ -1,7 +1,7 @@
 export const manifests = [
     {
         type: 'tiptapExtension',
-        alias: 'thta.ai.extension',
+        alias: 'hu-gen.ai.extension',
         name: 'AI TipTap Extension',
         api: () => import('./ai.tiptap-api'),
         meta: {
@@ -13,10 +13,10 @@ export const manifests = [
     {
         type: 'tiptapToolbarExtension',
         kind: 'button',                         
-        alias: 'thta.ai.toolbar',
+        alias: 'hu-gen.ai.toolbar',
         name: 'AI Toolbar Button',
         api: () => import('./ai.tiptap-toolbar-api'),
-        forExtensions: ['thta.ai.extension'],
+        forExtensions: ['hu-gen.ai.extension'],
         meta: {
             alias: 'aiGenerate',
             icon: 'icon-autofill',

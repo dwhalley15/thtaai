@@ -18,11 +18,11 @@ export type ImagePromptModalValue = {
     altText: string;
 }
 
-export const THTA_AI_IMAGE_PROMPT_MODAL = new UmbModalToken<
+export const HU_GEN_IMAGE_PROMPT_MODAL = new UmbModalToken<
     ImagePromptModalData,
     ImagePromptModalValue
 >(
-    "thta-ai-image-prompt-modal",
+    "hu-gen-image-prompt-modal",
     {
         modal: {
             type: "dialog",

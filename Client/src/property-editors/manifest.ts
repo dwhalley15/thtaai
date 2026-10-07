@@ -3,10 +3,10 @@ import type { ManifestPropertyEditorUi } from '@umbraco-cms/backoffice/property-
 export const manifests: ManifestPropertyEditorUi[] = [
     {
         type: "propertyEditorUi",
-        alias: "thta.propertyEditor.aiTextstring",
+        alias: "hu-gen.propertyEditor.aiTextstring",
         name: "AI Textstring",
 
-        elementName: "thta-ai-textstring",
+        elementName: "hu-gen-textstring",
         element: () => import("./ai-textstring.element"),
 
         meta: {
@@ -19,10 +19,10 @@ export const manifests: ManifestPropertyEditorUi[] = [
 
     {
         type: "propertyEditorUi",
-        alias: "thta.propertyEditor.aiTextarea",
+        alias: "hu-gen.propertyEditor.aiTextarea",
         name: "AI Textarea",
 
-        elementName: "thta-ai-textarea",
+        elementName: "hu-gen-textarea",
         element: () => import("./ai-textarea.element"),
 
         meta: {
@@ -35,19 +35,19 @@ export const manifests: ManifestPropertyEditorUi[] = [
 
     {
         type: "propertyEditorUi",
-        alias: "thta.propertyEditor.aiImage",
+        alias: "hu-gen.propertyEditor.aiImage",
         name: "AI Image",
 
-        elementName: "thta-ai-image",
+        elementName: "hu-gen-ai-image",
         element: () => import("./ai-image.element"),
 
         meta: {
-            label: 'AI Image',
-            icon: 'icon-picture',
-            group: 'ai-wrappers',
-            propertyEditorSchemaAlias: 'Umbraco.MediaPicker3',
-            supportsReadOnly: true
-        }
+            label: "AI Image",
+            icon: "icon-picture",
+            group: "ai-wrappers",
+            propertyEditorSchemaAlias: "Umbraco.MediaPicker3",
+            supportsReadOnly: true,
+        },
 
     }
 ];

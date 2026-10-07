@@ -21,7 +21,7 @@ type ConversationMessage = {
   content: string;
 };
 
-@customElement("thta-ai-prompt-modal")
+@customElement("hu-gen-prompt-modal")
 export class PromptModalElement
   extends UmbLitElement
   implements UmbModalExtensionElement<PromptModalData, PromptModalValue> {
@@ -94,7 +94,7 @@ export class PromptModalElement
       const authContext = await this.getContext(UMB_AUTH_CONTEXT);
       const token = await authContext?.getLatestToken();
 
-      const response = await fetch("/umbraco/thtaai/api/v1/generateStream", {
+      const response = await fetch("/umbraco/hu-gen/api/v1/generateStream", {
         method: "POST",
         credentials: "include",
         headers: {

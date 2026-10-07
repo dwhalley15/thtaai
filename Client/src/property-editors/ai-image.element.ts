@@ -7,10 +7,10 @@ import type { UmbPropertyEditorUiElement } from '@umbraco-cms/backoffice/propert
 import { UMB_MODAL_MANAGER_CONTEXT } from '@umbraco-cms/backoffice/modal';
 import type { UmbModalManagerContext } from '@umbraco-cms/backoffice/modal';
 import { UMB_MEDIA_PICKER_MODAL } from '@umbraco-cms/backoffice/media';
-import { THTA_AI_IMAGE_PROMPT_MODAL } from "../modals/image-prompt-modal.token";
+import { HU_GEN_IMAGE_PROMPT_MODAL } from "../modals/image-prompt-modal.token";
 
-@customElement("thta-ai-image")
-export class ThtaAiImageElement extends UmbLitElement implements UmbPropertyEditorUiElement {
+@customElement("hu-gen-image")
+export class HuGenImageElement extends UmbLitElement implements UmbPropertyEditorUiElement {
 
     @property({ attribute: false, reflect: false })
     value: any;
@@ -61,7 +61,7 @@ export class ThtaAiImageElement extends UmbLitElement implements UmbPropertyEdit
 
         const modal = this._modalContext.open(
             this,
-            THTA_AI_IMAGE_PROMPT_MODAL,
+            HU_GEN_IMAGE_PROMPT_MODAL,
             {
                 data: {
                     prompt: ""
@@ -116,4 +116,4 @@ export class ThtaAiImageElement extends UmbLitElement implements UmbPropertyEdit
     }
 }
 
-export { ThtaAiImageElement as default };
+export { HuGenImageElement as default };

@@ -4,19 +4,19 @@ import path from "node:path";
 
 export default defineConfig({
   build: {
-    outDir: "../wwwroot/App_Plugins/thtaai",
+    outDir: "../wwwroot/App_Plugins/hu-gen",
     emptyOutDir: true,
 
     lib: {
       entry: "src/bundle.manifests.ts",
       formats: ["es"],
-      fileName: () => "thta-ai"
+      fileName: () => "hu-gen"
     },
 
     rollupOptions: {
       external: [/^@umbraco/],
       output: {
-        entryFileNames: "thta-ai.js",
+        entryFileNames: "hu-gen.js",
         chunkFileNames: "chunks/[name].[hash].js",
         assetFileNames: "assets/[name].[hash][extname]"
       }
@@ -40,7 +40,7 @@ export default defineConfig({
         const buildVersion = Date.now();
 
         umbracoPackage.extensions[0].js =
-          `/App_Plugins/thtaai/thta-ai.js?v=${buildVersion}`;
+          `/App_Plugins/hu-gen/hu-gen.js?v=${buildVersion}`;
 
         fs.writeFileSync(
           packagePath,

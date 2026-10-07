@@ -1,14 +1,14 @@
 {
-  "id": "thta_ai",
-  "name": "thta_ai",
-  "version": "0.0.0",
+  "id": "hu-gen",
+  "name": "hu-gen",
+  "version": "2.0.0-beta.1",
   "allowTelemetry": true,
   "extensions": [
     {
-      "name": "thtaaiBundle",
-      "alias": "thta_ai.Bundle",
+      "name": "huGenBundle",
+      "alias": "hu-gen.Bundle",
       "type": "bundle",
-      "js": "/App_Plugins/thtaai/thta-ai.js?v=1783068625088"
+      "js": "/App_Plugins/hu-gen/hu-gen.js?v=1791378164010"
     }
   ]
 }

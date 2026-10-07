@@ -1,4 +1,4 @@
-namespace thta_ai.Models;
+namespace HuGen.Models;
 
 using System.Text.Json;
 using System.Text.Json.Serialization;

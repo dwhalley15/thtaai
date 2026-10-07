@@ -1,0 +1,10 @@
+<Project>
+  <Target Name="HuGenCopyAppPlugins" AfterTargets="Build">
+    <ItemGroup>
+      <HuGenAppPluginsFiles Include="$(MSBuildThisFileDirectory)..\staticwebassets\App_Plugins\hu-gen\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(HuGenAppPluginsFiles)"
+          DestinationFolder="$(MSBuildProjectDirectory)\wwwroot\App_Plugins\hu-gen\%(RecursiveDir)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

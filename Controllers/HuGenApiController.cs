@@ -3,14 +3,14 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Umbraco.Cms.Core.Models.Membership;
 using Umbraco.Cms.Core.Security;
-using thta_ai.Models;
+using HuGen.Models;
 using System.Text.Json;
 
-namespace thta_ai.Controllers
+namespace HuGen.Controllers
 {
     [ApiVersion("1.0")]
-    [ApiExplorerSettings(GroupName = "thta_ai")]
-    public class thtaaiApiController : thtaaiApiControllerBase
+    [ApiExplorerSettings(GroupName = "HuGen")]
+    public class HuGenApiController : HuGenApiControllerBase
     {
         private readonly IBackOfficeSecurityAccessor _backOfficeSecurityAccessor;
 
@@ -23,7 +23,7 @@ namespace thta_ai.Controllers
         private readonly IMediaUploadService _mediaUploadService;
         private readonly IContentMappingService _contentMappingService;
 
-        public thtaaiApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator, IPageGenerationService pageGenerator, IImageGenerationService imageGenerator, IMediaUploadService mediaUploadService, IContentMappingService contentMappingService)
+        public HuGenApiController(IBackOfficeSecurityAccessor backOfficeSecurityAccessor, ITextGenerationService generator, IPageGenerationService pageGenerator, IImageGenerationService imageGenerator, IMediaUploadService mediaUploadService, IContentMappingService contentMappingService)
         {
             _backOfficeSecurityAccessor = backOfficeSecurityAccessor;
             _generator = generator;

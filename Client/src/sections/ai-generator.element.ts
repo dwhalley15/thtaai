@@ -7,8 +7,8 @@ import {
 import { UMB_AUTH_CONTEXT } from '@umbraco-cms/backoffice/auth';
 import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 
-@customElement("ai-generator-view")
-export class AIGeneratorView extends UmbLitElement {
+@customElement("hu-gen-ai-generator-view")
+export class HuGenAIGeneratorView extends UmbLitElement {
 
     @state() private _prompt = "";
     @state() private _schema: any[] = [];
@@ -96,7 +96,7 @@ export class AIGeneratorView extends UmbLitElement {
         try {
             const token = await this._getToken();
 
-            const response = await fetch("/umbraco/thtaai/api/v1/generatePage", {
+            const response = await fetch("/umbraco/hu-gen/api/v1/generatePage", {
                 method: "POST",
                 credentials: "include",
                 headers: {
@@ -145,7 +145,7 @@ export class AIGeneratorView extends UmbLitElement {
 
             const llmResponse = JSON.parse(this._rawOutput);
 
-            const mapResponse = await fetch("/umbraco/thtaai/api/v1/mapContent", {
+            const mapResponse = await fetch("/umbraco/hu-gen/api/v1/mapContent", {
                 method: "POST",
                 credentials: "include",
                 headers: {
@@ -606,4 +606,4 @@ export class AIGeneratorView extends UmbLitElement {
     `];
 }
 
-export default AIGeneratorView;
+export default HuGenAIGeneratorView;

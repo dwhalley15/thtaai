@@ -4,13 +4,13 @@ using Umbraco.Cms.Api.Common.Attributes;
 using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Web.Common.Routing;
 
-namespace thta_ai.Controllers
+namespace HuGen.Controllers
 {
     [ApiController]
-    [BackOfficeRoute("thtaai/api/v{version:apiVersion}")]
+    [BackOfficeRoute("HuGen/api/v{version:apiVersion}")]
     [Authorize(Policy = AuthorizationPolicies.SectionAccessContent)]
     [MapToApi(Constants.ApiName)]
-    public class thtaaiApiControllerBase : ControllerBase
+    public class HuGenApiControllerBase : ControllerBase
     {
     }
 }

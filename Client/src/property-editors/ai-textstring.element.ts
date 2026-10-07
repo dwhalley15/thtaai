@@ -2,13 +2,13 @@ import { UmbLitElement } from "@umbraco-cms/backoffice/lit-element";
 import { customElement, property } from "lit/decorators.js";
 import { html } from "lit";
 import { UMB_MODAL_MANAGER_CONTEXT } from "@umbraco-cms/backoffice/modal";
-import { THTA_AI_PROMPT_MODAL }
+import { HU_GEN_PROMPT_MODAL }
     from "../modals/prompt-modal.token";
 import { UmbChangeEvent } from "@umbraco-cms/backoffice/event";
 import type { UmbPropertyEditorUiElement } from '@umbraco-cms/backoffice/property-editor';
 
-@customElement("thta-ai-textstring")
-export class ThtaAiTextstringElement extends UmbLitElement implements UmbPropertyEditorUiElement {
+@customElement("hu-gen-textstring")
+export class HuGenTextstringElement extends UmbLitElement implements UmbPropertyEditorUiElement {
 
     private _modalManager?: any;
 
@@ -28,7 +28,7 @@ export class ThtaAiTextstringElement extends UmbLitElement implements UmbPropert
 
         const modal = this._modalManager?.open(
             this,
-            THTA_AI_PROMPT_MODAL,
+            HU_GEN_PROMPT_MODAL,
             {
                 data: { prompt: "" },
             }
@@ -86,4 +86,4 @@ export class ThtaAiTextstringElement extends UmbLitElement implements UmbPropert
     }
 }
 
-export { ThtaAiTextstringElement as default };
+export { HuGenTextstringElement as default };

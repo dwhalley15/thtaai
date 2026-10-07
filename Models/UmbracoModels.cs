@@ -1,4 +1,4 @@
-namespace thta_ai.Models;
+namespace HuGen.Models;
 
 // ─── Umbraco Management API Models ───────────────────────────────────────────
 // These models represent the payload shape expected by Umbraco's

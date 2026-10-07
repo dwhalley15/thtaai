@@ -1,4 +1,4 @@
-using thta_ai.Models;
+using HuGen.Models;
 
 public interface ITextGenerationService
 {

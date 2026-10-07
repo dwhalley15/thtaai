@@ -1,4 +1,4 @@
-namespace thta_ai.Models;
+namespace HuGen.Models;
 
 public class GenerateRequest
 {

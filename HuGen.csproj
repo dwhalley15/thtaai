@@ -3,28 +3,28 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RootNamespace>thta_ai</RootNamespace>
+    <RootNamespace>HuGen</RootNamespace>
   </PropertyGroup>
 
    <PropertyGroup>
-    <PackageId>thtaai</PackageId>
-    <Product>ThtaAi</Product>
-    <Title>THTA AI</Title>
+    <PackageId>HuGen</PackageId>
+    <Product>HuGen</Product>
+    <Title>HuGen</Title>
 
     <!-- Packaging metadata -->
-    <Version>1.0.9</Version>
+    <Version>2.0.0-beta.1</Version>
     <Authors>David Whalley</Authors>
     <Company>the human tech agency</Company>
     <Description>AI-powered content generation for Umbraco 17. Can be configured to use any LLM API (e.g. Ollama) to automatically generate CMS content.</Description>
     <PackageTags>umbraco umbraco-marketplace ai llm content-generation</PackageTags>
-    <PackageProjectUrl>https://github.com/dwhalley15/thtaai</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/dwhalley15/thtaai</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/dwhalley15/hu-gen</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/dwhalley15/hu-gen</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageIcon>icon.png</PackageIcon>
     <PackageReadmeFile>README.md</PackageReadmeFile>
 
-    <StaticWebAssetBasePath>App_Plugins/thtaai</StaticWebAssetBasePath>
+    <StaticWebAssetBasePath>App_Plugins/HuGen</StaticWebAssetBasePath>
     <!-- Build behaviour -->
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
@@ -56,9 +56,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="build\thtaai.targets" Pack="true" PackagePath="build\thtaai.targets" />
-    <None Include="build\thtaai.targets" Pack="true" PackagePath="buildTransitive\thtaai.targets" />
-    <None Include="build\thtaai.targets" Pack="true" PackagePath="buildMultiTargeting\thtaai.targets" />
+    <None Include="build\HuGen.targets" Pack="true" PackagePath="build\HuGen.targets" />
+    <None Include="build\HuGen.targets" Pack="true" PackagePath="buildTransitive\HuGen.targets" />
+    <None Include="build\HuGen.targets" Pack="true" PackagePath="buildMultiTargeting\HuGen.targets" />
   </ItemGroup>
 
 </Project>

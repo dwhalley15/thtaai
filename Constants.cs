@@ -1,7 +1,7 @@
-namespace thta_ai
+namespace HuGen
 {
     public class Constants
     {
-        public const string ApiName = "thtaai";
+        public const string ApiName = "HuGen";
     }
 }
