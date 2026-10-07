@@ -1,5 +1,5 @@
 import { UmbTiptapToolbarElementApiBase } from '@umbraco-cms/backoffice/tiptap';
-import type { Editor } from '@umbraco-cms/backoffice/tiptap';
+import type { Editor } from '@tiptap/core';
 import { UMB_MODAL_MANAGER_CONTEXT } from '@umbraco-cms/backoffice/modal';
 import { THTA_AI_PROMPT_MODAL } from '../modals/prompt-modal.token';
 

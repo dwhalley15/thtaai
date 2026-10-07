@@ -9,7 +9,7 @@
     "generate-client": "node scripts/generate-openapi.js https://localhost:5000/umbraco/swagger/thtaai/swagger.json"
   },
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.97.1",
+    "@hey-api/openapi-ts": "0.81.1",
     "@types/node": "^25.9.0",
     "@umbraco-cms/backoffice": "^*",
     "chalk": "^5.6.2",
