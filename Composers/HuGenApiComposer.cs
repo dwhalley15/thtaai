@@ -35,7 +35,7 @@ namespace HuGen.Composers
             builder.Services.AddScoped<IContentMappingService, ContentMappingService>();
 
             builder.Services.Configure<AiGenerationOptions>(
-                builder.Config.GetSection("AiGeneration")
+                builder.Config.GetSection("HuGen")
             );
 
             builder.Services.Configure<SwaggerGenOptions>(opt =>
